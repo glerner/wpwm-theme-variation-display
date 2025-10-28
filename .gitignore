@@ -1,0 +1,74 @@
+# Dependencies
+/vendor/
+/node_modules/
+
+# Environment files
+.env
+.env.*
+!.env.sample.testing
+
+# IDE files
+.idea/
+.vscode/
+.windsurfrules
+*.sublime-project
+*.sublime-workspace
+
+# Windsurf Workspace settings
+*.code-workspace
+
+# OS files
+.DS_Store
+
+# Test analysis temporary files
+analyze_test_files.txt
+mapping_test_files.txt
+interface_fixes_results.txt
+fix_interface_references.sh
+test_files_to_analyze.txt
+untested_files.txt
+test_processing_progress*.txt
+test_analysis_results*.txt
+Thumbs.db
+
+# Test coverage
+/coverage/
+.phpunit.result.cache
+
+# Test analyzer temporary files
+.prompt_shown
+
+# Build files
+/build/
+/dist/
+
+# Build output
+/dist/
+
+# Temporary files
+*.log
+*.cache
+*.tmp
+
+# Test processing files
+# test_analysis_results.txt - Committed once but local changes should not be tracked
+# Use: git update-index --skip-worktree test_analysis_results.txt
+# To resume tracking: git update-index --no-skip-worktree test_analysis_results.txt
+source_files.txt
+/code_issues.md
+/untested_files.txt
+/temp_unanalyzed.txt
+test_processing_progress.txt
+junk.txt
+git-diff.txt
+/test_processing_scripts/
+last_processed_line.txt
+current_batch.txt
+interface_map.txt
+last_processed_interface_line.txt
+test_files_to_analyze.txt
+
+# want Git tracking these files for modifying PHPUnit test files, batch processing
+# bin/test-analyzer.sh
+# bin/move_test_files.sh
+# bin/process-test-results.sh
