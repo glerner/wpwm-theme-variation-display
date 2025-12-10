@@ -1,4 +1,4 @@
-=== WPWM Theme Variation Display ===
+=== Theme Variation Display by WP Website Mastery ===
 Contributors: lernerconsult
 Tags: site editor, global styles, style variations, palette, colors, fonts, theme.json
 Requires at least: 6.7

@@ -39,6 +39,8 @@ They are part of my upcoming course, "WordPress Websites: from Overwhelm to Mast
 ## Installation
 
 1. Upload the plugin folder to `/wp-content/plugins/wpwm-theme-variation-display/` or install via the Plugins screen.
+- Install the GitHub Updater https://github.com/afragen/github-updater
+- Use https://github.com/wpwm/wpwm-theme-variation-display
 2. Activate the plugin via the Plugins screen.
 3. Open Appearance → Theme Variation Display.
 
