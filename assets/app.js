@@ -1,5 +1,5 @@
 /* WPWM Theme Variation Display (colors + fonts) */
-(function () {
+function wpwmThemeVariationDisplay() {
   console.log('WPWM-TVD: Script loaded', new Date().toISOString());
 
   const cfg = (window.__WPWM_TVD__) || {};
@@ -7,20 +7,153 @@
 
   console.log('WPWM-TVD: Config', cfg);
 
-  // Constants
+  // ============================================================================
+  // CONSTANTS
+  // ============================================================================
+
+  // WordPress Data Store identifiers
+  // See: https://developer.wordpress.org/block-editor/reference-guides/data/
+  const WP_STORE_CORE = 'core';                      // Core entities (posts, users, settings, global styles)
+  const WP_STORE_EDIT_SITE = 'core/edit-site';       // Site Editor state and actions
+  const WP_STORE_NOTICES = 'core/notices';           // Admin notices and snackbars
+
+  // WordPress Entity types (used with getEditedEntityRecord, saveEditedEntityRecord)
+  const WP_ENTITY_KIND_ROOT = 'root';
+  const WP_ENTITY_NAME_GLOBAL_STYLES = 'globalStyles';
+
+  // Plugin REST API endpoints (relative to wp-json/)
+  const API_NAMESPACE = 'wpwm-tvd/v1';
+  const API_ENDPOINT_VARIATIONS = 'variations';
+  const API_ENDPOINT_CURRENT = 'current';
+  const API_ENDPOINT_APPLY = 'apply';
+  const API_ENDPOINT_LOG_ERROR = 'log-error';
+
+  // DOM element IDs
+  const DOM_ID_PANEL = 'wpwm-tvd-panel';
+  const DOM_ID_ROOT = 'wpwm-tvd-root';
+
+  // CSS class names (BEM-style)
+  const CSS_CLASS_GRID = 'wpwm-tvd-grid';
+  const CSS_CLASS_HEADER = 'wpwm-tvd-header';
+  const CSS_CLASS_NOTE = 'wpwm-tvd-note';
+  const CSS_CLASS_CARD = 'wpwm-tvd-card';
+  const CSS_CLASS_VAR_PREFIX = 'wpwm-tvd-var--';
+  const CSS_CLASS_MEDIA = 'wpwm-tvd-media';
+  const CSS_CLASS_BODY = 'wpwm-tvd-body';
+  const CSS_CLASS_TITLE = 'wpwm-tvd-title';
+  const CSS_CLASS_CURRENT_BADGE = 'wpwm-tvd-current-badge';
+  const CSS_CLASS_SWATCH = 'wpwm-tvd-swatch';
+  const CSS_CLASS_SWATCH_LABEL = 'wpwm-tvd-swatch-label';
+  const CSS_CLASS_SWATCHES = 'wpwm-tvd-swatches';
+  const CSS_CLASS_FONTS = 'wpwm-tvd-fonts';
+  const CSS_CLASS_FONTS_LABEL = 'wpwm-tvd-fonts-label';
+  const CSS_CLASS_ACTIONS = 'wpwm-tvd-actions';
+  const CSS_CLASS_MODAL_OVERLAY = 'wpwm-tvd-modal-overlay';
+  const CSS_CLASS_MODAL = 'wpwm-tvd-modal';
+  const CSS_CLASS_MODAL_HEADER = 'wpwm-tvd-modal-header';
+  const CSS_CLASS_MODAL_TITLE = 'wpwm-tvd-modal-title';
+  const CSS_CLASS_MODAL_CONTROLS = 'wpwm-tvd-modal-controls';
+  const CSS_CLASS_THEME_TOGGLE = 'wpwm-tvd-theme-toggle';
+  const CSS_CLASS_MODAL_CLOSE = 'wpwm-tvd-modal-close';
+  const CSS_CLASS_PREVIEW_CONTENT = 'wpwm-tvd-preview-content';
+  const CSS_CLASS_MODAL_NAV = 'wpwm-tvd-modal-nav';
+  const CSS_CLASS_NAV_BTN = 'wpwm-tvd-nav-btn';
+  const CSS_CLASS_COUNTER = 'wpwm-tvd-counter';
+
+  // Site Editor CSS selectors (for detecting styles screen)
+  const SITE_EDITOR_SELECTORS = [
+    '.edit-site-style-variations',
+    '.edit-site-style-variations__list',
+    '.edit-site-sidebar__panel-tabs',
+    '.edit-site-global-styles-sidebar',
+    '.interface-complementary-area'
+  ].join(', ');
+
+  // Timing and limits
   const MAX_FONT_SAMPLES = 2;
+  const SITE_EDITOR_MAX_ATTEMPTS = 100;  // ~10 seconds at 100ms intervals
+
+  // Default colors
   const DEFAULT_WHITE_RGB = [255, 255, 255];
   const DEFAULT_BLACK_RGB = [0, 0, 0];
   const DEFAULT_LIGHT_TEXT = '#000';
   const DEFAULT_DARK_TEXT = '#fff';
 
+  // Fallback colors for preview (when variation doesn't define them)
+  const FALLBACK_COLORS = {
+    primaryLight: '#7ad1ff',
+    primaryDark: '#004f78',
+    primaryLighter: '#b1e4ff',
+    primaryDarker: '#003c5c',
+    secondaryLight: '#fcbc41',
+    secondaryDark: '#664402',
+    secondaryLighter: '#fdd891',
+    secondaryDarker: '#4e3401',
+    tertiaryLight: '#fff9c4',
+    tertiaryDark: '#f57f17',
+    accentLight: '#ff7a45',
+    accentDark: '#d84315',
+    accentDarker: '#bf360c',
+    errorLight: '#fecaca',
+    errorDark: '#991b1b',
+    noticeLight: '#fde68a',
+    noticeDark: '#92400e',
+    successLight: '#a7f3d0',
+    successDark: '#065f46',
+    bgLight: '#ffffff',
+    bgDark: '#1a1a1a',
+    textLight: '#1a1a1a',
+    textDark: '#e0e0e0'
+  };
+
+  // Font stacks (fallback chains)
   const FONT_STACK_SANS = ' , "Noto Sans", "Liberation Sans", Roboto, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, "Segoe UI", sans-serif';
   const FONT_STACK_SERIF = 'ui-serif, Georgia, Cambria, "Times New Roman", Times, serif';
   const FONT_STACK_MONO = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
 
+  // UI text
+  const UI_TEXT = {
+    noteText: 'Shows colors whether they are stored as color numbers or CSS variables. Shows fonts (if any) that are defined.',
+    fontsLabel: 'Fonts:',
+    selectBtn: 'Select',
+    previewBtn: 'Preview',
+    prevBtn: '← Previous',
+    nextBtn: 'Next →',
+    lightMode: '☀️ Light',
+    darkMode: '🌙 Dark',
+    closeBtn: '✕',
+    currentBadge: ' (Current)'
+  };
+
+  // Notice types
+  const NOTICE_TYPE_SNACKBAR = 'snackbar';
+
   // Global state
   let allVariations = [];
   let currentVariationSlug = null;
+
+  // ============================================================================
+  // HELPER FUNCTIONS
+  // ============================================================================
+
+  /**
+   * Safely access deeply nested properties in an object.
+   * Returns the value at the path, or defaultValue if any part is missing.
+   * @param {Object} obj - The object to traverse
+   * @param {string[]} keys - Array of property names to follow
+   * @param {*} defaultValue - Value to return if path doesn't exist (default: undefined)
+   * @returns {*} The value at the path or defaultValue
+   */
+  function getConfigPath(obj, keys, defaultValue) {
+    let current = obj;
+    for (const key of keys) {
+      if (current == null || typeof current !== 'object') {
+        return defaultValue;
+      }
+      current = current[key];
+    }
+    return current !== undefined ? current : defaultValue;
+  }
 
   function el(tag, cls, text) {
     const n = document.createElement(tag);
@@ -83,41 +216,36 @@
     console.log('WPWM-TVD: Waiting for Site Editor styles screen...');
     const { subscribe } = wp.data;
     let attempts = 0;
-    const maxAttempts = 100; // Try for ~10 seconds
 
     const unsub = subscribe(() => {
       attempts++;
 
       // Try multiple possible selectors for different WordPress versions
-      const host = document.querySelector(
-        '.edit-site-style-variations, ' +
-        '.edit-site-style-variations__list, ' +
-        '.edit-site-sidebar__panel-tabs, ' +
-        '.edit-site-global-styles-sidebar, ' +
-        '.interface-complementary-area'
-      );
+      const host = document.querySelector(SITE_EDITOR_SELECTORS);
 
       if (host) {
         console.log('WPWM-TVD: Site Editor styles screen found!', host.className);
         unsub();
         cb(host);
-      } else if (attempts >= maxAttempts) {
+      } else if (attempts >= SITE_EDITOR_MAX_ATTEMPTS) {
         console.log('WPWM-TVD: Site Editor styles screen not found after', attempts, 'attempts');
         unsub();
       }
     });
   }
 
+  function buildApiPath(endpoint) {
+    let relBase = API_NAMESPACE;
+    try {
+      const u = new URL(apiBase, window.location.origin);
+      relBase = u.pathname.replace(/^\/?/, '').replace(/^.*?wp-json\//, '');
+    } catch (_e) { /* fallback to default relBase */ }
+    return relBase.replace(/\/?$/, '') + '/' + endpoint;
+  }
+
   async function fetchVariations() {
     try {
-      // apiFetch expects a path relative to /wp-json, e.g. 'wpwm-tvd/v1/variations'
-      let relBase = 'wpwm-tvd/v1';
-      try {
-        const u = new URL(apiBase, window.location.origin);
-        // Strip everything up to and including '/wp-json/'
-        relBase = u.pathname.replace(/^\/?/, '').replace(/^.*?wp-json\//, '');
-      } catch (_e) { /* fallback to default relBase */ }
-      const path = relBase.replace(/\/?$/, '') + '/variations';
+      const path = buildApiPath(API_ENDPOINT_VARIATIONS);
       const res = await window.wp.apiFetch({ path });
       return res.variations || [];
     } catch (e) { console.error('WPWM-TVD fetch error', e); return []; }
@@ -127,13 +255,13 @@
     try {
       // Try Site Editor API first (only available in Site Editor context)
       if (window.wp && window.wp.data && window.wp.data.select) {
-        const coreSel = window.wp.data.select('core');
+        const coreSel = window.wp.data.select(WP_STORE_CORE);
         if (coreSel && coreSel.getEditedEntityRecord) {
           const currentGlobalStylesId = coreSel.__experimentalGetCurrentGlobalStylesId
             ? coreSel.__experimentalGetCurrentGlobalStylesId()
             : null;
           if (currentGlobalStylesId) {
-            const globalStyles = coreSel.getEditedEntityRecord('root', 'globalStyles', currentGlobalStylesId);
+            const globalStyles = coreSel.getEditedEntityRecord(WP_ENTITY_KIND_ROOT, WP_ENTITY_NAME_GLOBAL_STYLES, currentGlobalStylesId);
             if (globalStyles && globalStyles.title) {
               // Try to match title to a variation slug
               const matchedVar = allVariations.find(v =>
@@ -151,12 +279,7 @@
 
     // Fallback: Use REST API (works in admin context)
     try {
-      let relBase = 'wpwm-tvd/v1';
-      try {
-        const u = new URL(apiBase, window.location.origin);
-        relBase = u.pathname.replace(/^\/?/, '').replace(/^.*?wp-json\//, '');
-      } catch (_e) { /* fallback */ }
-      const path = relBase.replace(/\/?$/, '') + '/current';
+      const path = buildApiPath(API_ENDPOINT_CURRENT);
       const response = await window.wp.apiFetch({ path });
       console.log('WPWM-TVD: Current variation from REST API:', response);
       return response.current;
@@ -168,37 +291,36 @@
 
   function createPanelStructure() {
     const panel = el('div', '', '');
-    panel.id = 'wpwm-tvd-panel';
-    const header = el('div', 'wpwm-tvd-header');
-    const noteText = 'Shows colors whether they are stored as color numbers or CSS variables. Shows fonts (if any) that are defined.';
-    if (noteText) {
-      const note = el('div', 'wpwm-tvd-note', noteText);
+    panel.id = DOM_ID_PANEL;
+    const header = el('div', CSS_CLASS_HEADER);
+    if (UI_TEXT.noteText) {
+      const note = el('div', CSS_CLASS_NOTE, UI_TEXT.noteText);
       header.appendChild(note);
     }
     if (header.childNodes.length) {
       panel.appendChild(header);
     }
-    const grid = el('div', 'wpwm-tvd-grid');
+    const grid = el('div', CSS_CLASS_GRID);
     panel.appendChild(grid);
     return panel;
   }
 
   function mountPanel(afterEl) {
-    let panel = document.getElementById('wpwm-tvd-panel');
+    let panel = document.getElementById(DOM_ID_PANEL);
     if (!panel) {
       panel = createPanelStructure();
       afterEl.parentElement.insertBefore(panel, afterEl.nextSibling);
     }
-    return panel.querySelector('.wpwm-tvd-grid');
+    return panel.querySelector('.' + CSS_CLASS_GRID);
   }
 
   function mountPanelInContainer(container) {
-    let panel = document.getElementById('wpwm-tvd-panel');
+    let panel = document.getElementById(DOM_ID_PANEL);
     if (!panel) {
       panel = createPanelStructure();
       container.appendChild(panel);
     }
-    return panel.querySelector('.wpwm-tvd-grid');
+    return panel.querySelector('.' + CSS_CLASS_GRID);
   }
 
   function normalizeSlug(slugString) {
@@ -244,24 +366,24 @@
 
   function createColorSwatch(paletteItem) {
     const sw = document.createElement('div');
-    sw.className = 'wpwm-tvd-swatch';
+    sw.className = CSS_CLASS_SWATCH;
     sw.style.background = (paletteItem.color || 'transparent');
     const colorSlug = (paletteItem.slug || paletteItem.name || '').toString();
     sw.title = colorSlug;
     sw.dataset.slug = colorSlug.toLowerCase();
     const label = document.createElement('div');
-    label.className = 'wpwm-tvd-swatch-label';
+    label.className = CSS_CLASS_SWATCH_LABEL;
     label.textContent = colorSlug;
     sw.appendChild(label);
     return sw;
   }
 
   function renderSwatches(variation) {
-    const swWrap = el('div', 'wpwm-tvd-swatches');
+    const swWrap = el('div', CSS_CLASS_SWATCHES);
     swWrap.style.display = 'flex';
     swWrap.style.height = '100%';
     swWrap.style.width = '100%';
-    const varPalette = (((variation.config || {}).settings || {}).color || {}).palette || [];
+    const varPalette = getConfigPath(variation.config, ['settings', 'color', 'palette'], []);
     if (varPalette.length) {
       varPalette.forEach(paletteItem => {
         if (!paletteItem) return;
@@ -272,12 +394,12 @@
   }
 
   function renderFontSamples(variation) {
-    const fontsBox = el('div', 'wpwm-tvd-fonts');
-    const ff = (((variation.config || {}).settings || {}).typography || {}).fontFamilies || [];
-    const stylesFF = (((variation.config || {}).styles || {}).typography || {}).fontFamily;
+    const fontsBox = el('div', CSS_CLASS_FONTS);
+    const ff = getConfigPath(variation.config, ['settings', 'typography', 'fontFamilies'], []);
+    const stylesFF = getConfigPath(variation.config, ['styles', 'typography', 'fontFamily']);
     const hasAnyFonts = (ff && ff.length) || !!stylesFF;
     if (hasAnyFonts) {
-      fontsBox.appendChild(el('div', 'wpwm-tvd-fonts-label', 'Fonts:'));
+      fontsBox.appendChild(el('div', CSS_CLASS_FONTS_LABEL, UI_TEXT.fontsLabel));
     }
     if (ff.length) {
       const row = el('div', 'font-row');
@@ -300,10 +422,10 @@
   }
 
   function createActionButtons(variation, variationIndex) {
-    const actions = el('div', 'wpwm-tvd-actions');
-    const btnSelect = el('button', '', 'Select');
+    const actions = el('div', CSS_CLASS_ACTIONS);
+    const btnSelect = el('button', '', UI_TEXT.selectBtn);
     btnSelect.addEventListener('click', () => applyVariation(variation));
-    const btnPreview = el('button', 'secondary', 'Preview');
+    const btnPreview = el('button', 'secondary', UI_TEXT.previewBtn);
     btnPreview.addEventListener('click', () => showPreviewModal(variationIndex));
     actions.appendChild(btnSelect);
     actions.appendChild(btnPreview);
@@ -313,7 +435,7 @@
   function applyContrastAwareLabels(card) {
     requestAnimationFrame(() => {
       try {
-        const swatches = card.querySelectorAll('.wpwm-tvd-swatch');
+        const swatches = card.querySelectorAll('.' + CSS_CLASS_SWATCH);
         const style = getComputedStyle(card);
         const lightVarStr = style.getPropertyValue('--text-on-light').trim() || DEFAULT_LIGHT_TEXT;
         const darkVarStr = style.getPropertyValue('--text-on-dark').trim() || DEFAULT_DARK_TEXT;
@@ -326,7 +448,7 @@
         })();
         swatches.forEach(sw => {
           const swatchBg = getComputedStyle(sw).backgroundColor;
-          const label = sw.querySelector('.wpwm-tvd-swatch-label');
+          const label = sw.querySelector('.' + CSS_CLASS_SWATCH_LABEL);
           if (!label) return;
           const parsedSwatchBg = parseRgbString(swatchBg);
           let bgRGB;
@@ -350,12 +472,12 @@
 
   function renderCard(grid, v, variationIndex) {
     const slug = normalizeSlug(v.slug || v.title || 'variation');
-    const scopeClass = 'wpwm-tvd-var--' + slug;
-    const card = el('div', 'wpwm-tvd-card ' + scopeClass);
+    const scopeClass = CSS_CLASS_VAR_PREFIX + slug;
+    const card = el('div', CSS_CLASS_CARD + ' ' + scopeClass);
     card.dataset.variationSlug = slug;
 
     // Inject scoped CSS variables if provided by variation JSON
-    const cssFromJson = (v.config && v.config.styles && v.config.styles.css) ? v.config.styles.css : '';
+    const cssFromJson = getConfigPath(v.config, ['styles', 'css'], '');
     const scopedCss = rewriteAndSanitizeCss(cssFromJson, scopeClass);
     if (scopedCss) {
       const styleTag = document.createElement('style');
@@ -364,20 +486,20 @@
     }
 
     // Media/preview area with color swatches
-    const media = el('div', 'wpwm-tvd-media');
+    const media = el('div', CSS_CLASS_MEDIA);
     media.style.display = 'flex';
     media.style.alignItems = 'stretch';
     media.style.justifyContent = 'stretch';
     media.appendChild(renderSwatches(v));
 
     // Body with title, meta, fonts, and actions
-    const body = el('div', 'wpwm-tvd-body');
+    const body = el('div', CSS_CLASS_BODY);
     const titleText = v.title || v.slug;
-    const title = el('div', 'wpwm-tvd-title', titleText);
+    const title = el('div', CSS_CLASS_TITLE, titleText);
 
     // Add current indicator if this is the active variation
     if (currentVariationSlug && slug === currentVariationSlug) {
-      const currentBadge = el('span', 'wpwm-tvd-current-badge', ' (Current)');
+      const currentBadge = el('span', CSS_CLASS_CURRENT_BADGE, UI_TEXT.currentBadge);
       title.appendChild(currentBadge);
     }
 
@@ -400,24 +522,24 @@
     let isDarkMode = false;
 
     // Create modal overlay
-    const overlay = el('div', 'wpwm-tvd-modal-overlay');
-    const modal = el('div', 'wpwm-tvd-modal');
+    const overlay = el('div', CSS_CLASS_MODAL_OVERLAY);
+    const modal = el('div', CSS_CLASS_MODAL);
 
     // Modal header with title and controls
-    const header = el('div', 'wpwm-tvd-modal-header');
-    const titleEl = el('h2', 'wpwm-tvd-modal-title');
-    const controls = el('div', 'wpwm-tvd-modal-controls');
+    const header = el('div', CSS_CLASS_MODAL_HEADER);
+    const titleEl = el('h2', CSS_CLASS_MODAL_TITLE);
+    const controls = el('div', CSS_CLASS_MODAL_CONTROLS);
 
     // Light/Dark toggle
-    const themeToggle = el('button', 'wpwm-tvd-theme-toggle', '☀️ Light');
+    const themeToggle = el('button', CSS_CLASS_THEME_TOGGLE, UI_TEXT.lightMode);
     themeToggle.addEventListener('click', () => {
       isDarkMode = !isDarkMode;
-      themeToggle.textContent = isDarkMode ? '🌙 Dark' : '☀️ Light';
+      themeToggle.textContent = isDarkMode ? UI_TEXT.darkMode : UI_TEXT.lightMode;
       updatePreview();
     });
 
     // Close button
-    const closeBtn = el('button', 'wpwm-tvd-modal-close', '✕');
+    const closeBtn = el('button', CSS_CLASS_MODAL_CLOSE, UI_TEXT.closeBtn);
     closeBtn.addEventListener('click', () => {
       document.body.removeChild(overlay);
     });
@@ -428,13 +550,13 @@
     header.appendChild(controls);
 
     // Preview content area
-    const previewContent = el('div', 'wpwm-tvd-preview-content');
+    const previewContent = el('div', CSS_CLASS_PREVIEW_CONTENT);
 
     // Navigation controls
-    const nav = el('div', 'wpwm-tvd-modal-nav');
-    const prevBtn = el('button', 'wpwm-tvd-nav-btn', '← Previous');
-    const nextBtn = el('button', 'wpwm-tvd-nav-btn', 'Next →');
-    const counter = el('span', 'wpwm-tvd-counter');
+    const nav = el('div', CSS_CLASS_MODAL_NAV);
+    const prevBtn = el('button', CSS_CLASS_NAV_BTN, UI_TEXT.prevBtn);
+    const nextBtn = el('button', CSS_CLASS_NAV_BTN, UI_TEXT.nextBtn);
+    const counter = el('span', CSS_CLASS_COUNTER);
 
     prevBtn.addEventListener('click', () => {
       currentIndex = (currentIndex - 1 + allVariations.length) % allVariations.length;
@@ -459,8 +581,8 @@
     // Update preview content
     function updatePreview() {
       const v = allVariations[currentIndex];
-      const palette = (((v.config || {}).settings || {}).color || {}).palette || [];
-      const cssString = (((v.config || {}).styles || {}).css) || '';
+      const palette = getConfigPath(v.config, ['settings', 'color', 'palette'], []);
+      const cssString = getConfigPath(v.config, ['styles', 'css'], '');
 
       titleEl.textContent = v.title || v.slug;
       counter.textContent = `${currentIndex + 1} / ${allVariations.length}`;
@@ -506,70 +628,150 @@
         return null;
       };
 
+      const chooseForeground = (bgColor, textOnLight, textOnDark) => {
+        const bgRgb = colorStringToRgb(bgColor);
+        const tolRgb = colorStringToRgb(textOnLight);
+        const todRgb = colorStringToRgb(textOnDark);
+        const cLight = contrastRatioRGB(bgRgb, tolRgb);
+        const cDark = contrastRatioRGB(bgRgb, todRgb);
+        return cLight >= cDark ? textOnLight : textOnDark;
+      };
+
       // Try common WordPress theme slugs and palette generator slugs
       const bgColor = isDarkMode
-        ? (getColor('base-dark', 'background-dark', 'base') || '#1a1a1a')
-        : (getColor('base-light', 'background-light', 'base', 'background') || '#ffffff');
+        ? (getColor('base-dark', 'background-dark', 'base') || FALLBACK_COLORS.bgDark)
+        : (getColor('base-light', 'background-light', 'base', 'background') || FALLBACK_COLORS.bgLight);
 
       const textColor = isDarkMode
-        ? (getColor('text-on-dark', 'contrast-dark', 'foreground-dark', 'contrast') || '#e0e0e0')
-        : (getColor('text-on-light', 'contrast-light', 'foreground-light', 'contrast', 'foreground') || '#1a1a1a');
+        ? (getColor('text-on-dark', 'contrast-dark', 'foreground-dark', 'contrast') || FALLBACK_COLORS.textDark)
+        : (getColor('text-on-light', 'contrast-light', 'foreground-light', 'contrast', 'foreground') || FALLBACK_COLORS.textLight);
 
-      // Headings: primary-dark in light mode, primary-light in dark mode
-      const headingColor = isDarkMode
-        ? (getColor('primary-light', 'primary') || '#7ad1ff')
-        : (getColor('primary-dark', 'primary-darker', 'primary') || '#004f78');
+      const textOnLight = getColor('text-on-light', 'contrast-light', 'foreground-light', 'contrast', 'foreground') || DEFAULT_LIGHT_TEXT;
+      const textOnDark = getColor('text-on-dark', 'contrast-dark', 'foreground-dark', 'contrast') || DEFAULT_DARK_TEXT;
 
-      // Featured section: primary-lighter background with text-on-light text in light mode
-      const featuredBg = isDarkMode
-        ? (getColor('primary-darker', 'primary-dark') || '#003c5c')
-        : (getColor('primary-lighter', 'primary-light') || '#b1e4ff');
-      const featuredText = isDarkMode
-        ? (getColor('text-on-dark') || '#e0e0e0')
-        : (getColor('text-on-light') || '#1a1a1a');
+      const primaryLight = getColor('primary-light', 'primary') || FALLBACK_COLORS.primaryLight;
+      const primaryDark = getColor('primary-dark', 'primary-darker', 'primary') || FALLBACK_COLORS.primaryDark;
+      const primaryLighter = getColor('primary-lighter', 'primary-light', 'primary') || FALLBACK_COLORS.primaryLighter;
+      const primaryDarker = getColor('primary-darker', 'primary-dark', 'primary') || FALLBACK_COLORS.primaryDarker;
 
-      // For list items, use darker colors in light mode for readability
-      const listColor1 = isDarkMode
-        ? (getColor('secondary-light', 'secondary') || '#fcbc41')
-        : (getColor('secondary-dark', 'secondary-darker', 'secondary') || '#664402');
-      const listColor2 = isDarkMode
-        ? (getColor('secondary-lighter') || '#fdd891')
-        : (getColor('secondary-darker', 'secondary-dark') || '#4e3401');
+      const secondaryLight = getColor('secondary-light', 'secondary') || FALLBACK_COLORS.secondaryLight;
+      const secondaryDark = getColor('secondary-dark', 'secondary-darker', 'secondary') || FALLBACK_COLORS.secondaryDark;
+      const secondaryLighter = getColor('secondary-lighter', 'secondary-light', 'secondary') || FALLBACK_COLORS.secondaryLighter;
+      const secondaryDarker = getColor('secondary-darker', 'secondary-dark', 'secondary') || FALLBACK_COLORS.secondaryDarker;
 
-      const accentDark = getColor('accent-dark', 'accent') || '#d84315';
-      const accentDarker = getColor('accent-darker') || '#bf360c';
-      const tertiaryLight = getColor('tertiary-light', 'tertiary') || '#fff9c4';
-      const tertiaryDark = getColor('tertiary-dark', 'tertiary-darker') || '#f57f17';
+      const tertiaryLight = getColor('tertiary-light', 'tertiary') || FALLBACK_COLORS.tertiaryLight;
+      const tertiaryDark = getColor('tertiary-dark', 'tertiary-darker', 'tertiary') || FALLBACK_COLORS.tertiaryDark;
+      const tertiaryLighter = getColor('tertiary-lighter', 'tertiary-light', 'tertiary') || tertiaryLight;
+      const tertiaryDarker = getColor('tertiary-darker', 'tertiary-dark', 'tertiary') || tertiaryDark;
 
+      const accentLight = getColor('accent-light', 'accent') || FALLBACK_COLORS.accentLight;
+      const accentDark = getColor('accent-dark', 'accent') || FALLBACK_COLORS.accentDark;
+      const accentLighter = getColor('accent-lighter', 'accent-light', 'accent') || accentLight;
+      const accentDarker = getColor('accent-darker', 'accent-dark', 'accent') || FALLBACK_COLORS.accentDarker;
 
-      // Build preview HTML with CSS classes
+      const errorLight = getColor('error-light', 'error') || FALLBACK_COLORS.errorLight;
+      const errorDark = getColor('error-dark', 'error') || FALLBACK_COLORS.errorDark;
+      const noticeLight = getColor('warning-light', 'notice-light', 'warning', 'notice') || FALLBACK_COLORS.noticeLight;
+      const noticeDark = getColor('warning-dark', 'notice-dark', 'warning', 'notice') || FALLBACK_COLORS.noticeDark;
+      const successLight = getColor('success-light', 'success') || FALLBACK_COLORS.successLight;
+      const successDark = getColor('success-dark', 'success') || FALLBACK_COLORS.successDark;
+
+      const semanticErrorBg = isDarkMode ? errorDark : errorLight;
+      const semanticNoticeBg = isDarkMode ? noticeDark : noticeLight;
+      const semanticSuccessBg = isDarkMode ? successDark : successLight;
+
+      const statusErrorText = chooseForeground(semanticErrorBg, textOnLight, textOnDark);
+      const statusNoticeText = chooseForeground(semanticNoticeBg, textOnLight, textOnDark);
+      const statusSuccessText = chooseForeground(semanticSuccessBg, textOnLight, textOnDark);
+
       previewContent.innerHTML = `
-        <div class=\"wpwm-preview-page\" style=\"--bg-color: ${bgColor}; --text-color: ${textColor}; --heading-color: ${headingColor}; --featured-bg: ${featuredBg}; --featured-text: ${featuredText}; --list-color-1: ${listColor1}; --list-color-2: ${listColor2}; --accent-dark: ${accentDark}; --accent-darker: ${accentDarker}; --tertiary-light: ${tertiaryLight}; --tertiary-dark: ${tertiaryDark};\">
-          <h1 class=\"preview-heading\">Welcome to Your Site</h1>
+        <div class=\"wpwm-preview\" style=\"
+          --wpwm-bg: ${bgColor};
+          --wpwm-fg: ${textColor};
+          --text-on-light: ${textOnLight};
+          --text-on-dark: ${textOnDark};
+          --wpwm-primary: ${isDarkMode ? primaryDark : primaryLight};
+          --wpwm-primary-contrast: ${chooseForeground(isDarkMode ? primaryDark : primaryLight, textOnLight, textOnDark)};
+          --wpwm-secondary: ${isDarkMode ? secondaryDark : secondaryLight};
+          --wpwm-secondary-contrast: ${chooseForeground(isDarkMode ? secondaryDark : secondaryLight, textOnLight, textOnDark)};
+          --wpwm-tertiary: ${isDarkMode ? tertiaryDark : tertiaryLight};
+          --wpwm-tertiary-contrast: ${chooseForeground(isDarkMode ? tertiaryDark : tertiaryLight, textOnLight, textOnDark)};
+          --wpwm-accent: ${isDarkMode ? accentLight : accentDarker};
+          --wpwm-accent-hover: ${isDarkMode ? accentDark : accentDark};
+          --wpwm-band-bg: ${isDarkMode ? primaryDarker : primaryLighter};
+          --wpwm-band-fg: ${chooseForeground(isDarkMode ? primaryDarker : primaryLighter, textOnLight, textOnDark)};
+          --wpwm-list-odd-bg: ${isDarkMode ? secondaryDark : secondaryLight};
+          --wpwm-list-even-bg: ${isDarkMode ? secondaryDarker : secondaryLighter};
+          --wpwm-list-fg: ${chooseForeground(isDarkMode ? secondaryDark : secondaryLight, textOnLight, textOnDark)};
+          --wpwm-testimonial-bg: ${isDarkMode ? tertiaryDarker : tertiaryLighter};
+          --wpwm-testimonial-fg: ${chooseForeground(isDarkMode ? tertiaryDarker : tertiaryLighter, textOnLight, textOnDark)};
+          --wpwm-status-error-bg: ${semanticErrorBg};
+          --wpwm-status-error-fg: ${statusErrorText};
+          --wpwm-status-notice-bg: ${semanticNoticeBg};
+          --wpwm-status-notice-fg: ${statusNoticeText};
+          --wpwm-status-success-bg: ${semanticSuccessBg};
+          --wpwm-status-success-fg: ${statusSuccessText};
+        \">
+          <div class=\"wpwm-preview-card\">
+            <h1 class=\"wpwm-preview-title\">Welcome to Your Site</h1>
+            <p class=\"wpwm-preview-lead\">The quick brown fox <a href=\"#\" class=\"wpwm-preview-inline-link\">jumps over</a> the lazy dog.</p>
 
-          <section class=\"preview-featured\">
-            <h2>Featured Section</h2>
-            <p>This section uses the primary-lighter background to create visual hierarchy and draw attention to important content.</p>
-          </section>
+            <div class=\"wpwm-preview-primary-band\">
+              <div class=\"wpwm-preview-primary-band-inner\">
+                <div>
+                  <div class=\"wpwm-preview-kicker\">Featured section</div>
+                  <div class=\"wpwm-preview-band-title\">Build trust with clear, readable colors</div>
+                  <div class=\"wpwm-preview-band-text\">Use Primary for section backgrounds and Accent for links and calls to action.</div>
+                </div>
+                <div class=\"wpwm-preview-primary-band-ctas\">
+                  <a href=\"#\" class=\"wpwm-preview-accent-cta\">Get started</a>
+                </div>
+              </div>
+            </div>
 
-          <h3 class=\"preview-subheading\">Key Features</h3>
-          <ul class=\"preview-list\">
-            <li class=\"list-item-alt\">Beautiful color palettes for every mood</li>
-            <li>Carefully crafted design variations</li>
-            <li class=\"list-item-alt\">Instant preview and application</li>
-            <li>Light and dark mode support</li>
-          </ul>
+            <hr class=\"wpwm-preview-rule\" />
 
-          <blockquote class=\"preview-quote\">
-            <p>"This theme variation system makes it incredibly easy to find the perfect color scheme for my website. The preview feature is a game-changer!"</p>
-          </blockquote>
+            <div class=\"wpwm-preview-info-cards\">
+              <div class=\"wpwm-preview-info-card wpwm-preview-info-card--primary\"><strong>Primary Light</strong><span>Text on primary background</span></div>
+              <div class=\"wpwm-preview-info-card wpwm-preview-info-card--secondary\"><strong>Secondary Light</strong><span>Text on secondary background</span></div>
+              <div class=\"wpwm-preview-info-card wpwm-preview-info-card--tertiary\"><strong>Tertiary Light</strong><span>Text on tertiary background</span></div>
+            </div>
 
-          <div class=\"preview-actions\">
-            <a href=\"#\" class=\"preview-btn-primary\">Get Started</a>
-            <a href=\"#\" class=\"preview-btn-secondary\">Learn More</a>
+            <nav class=\"wpwm-preview-menu\" aria-label=\"Menu\">
+              <a href=\"#\" class=\"wpwm-preview-menu-item\">Menu item</a>
+              <a href=\"#\" class=\"wpwm-preview-menu-item\">Menu item</a>
+              <a href=\"#\" class=\"wpwm-preview-menu-item\">Menu item</a>
+            </nav>
+
+            <div class=\"wpwm-preview-testimonial\">
+              <div class=\"wpwm-preview-testimonial-quote\">“We switched to a contrast-checked palette and immediately got fewer complaints about readability.”</div>
+              <div class=\"wpwm-preview-testimonial-author\">
+                <div class=\"wpwm-preview-avatar\" aria-hidden=\"true\"></div>
+                <div>
+                  <div class=\"wpwm-preview-author-name\">Alex Rivera</div>
+                  <div class=\"wpwm-preview-author-title\">Site Owner</div>
+                </div>
+              </div>
+            </div>
+
+            <div class=\"wpwm-preview-list-block\">
+              <ul class=\"wpwm-preview-list\">
+                <li>First item</li>
+                <li>Second item</li>
+                <li>Third item</li>
+                <li>Fourth item</li>
+              </ul>
+            </div>
+
+            <div class=\"wpwm-preview-status-messages\" aria-label=\"Status messages demo\">
+              <div class=\"wpwm-preview-status wpwm-preview-status--error\" role=\"alert\"><strong>Error:</strong> Something went wrong. Please try again.</div>
+              <div class=\"wpwm-preview-status wpwm-preview-status--notice\" role=\"status\"><strong>Notice:</strong> Unsaved changes. Don’t forget to save.</div>
+              <div class=\"wpwm-preview-status wpwm-preview-status--success\" role=\"status\"><strong>Success:</strong> Your settings have been saved.</div>
+            </div>
           </div>
         </div>
       `;
+
     }
 
     // Initial render
@@ -598,7 +800,7 @@
   function previewInEditor(variation) {
     // Non-destructive: apply config to current editor session if API exists
     try {
-      const editSite = wp.data.dispatch('core/edit-site');
+      const editSite = wp.data.dispatch(WP_STORE_EDIT_SITE);
       if (editSite && typeof editSite.setGlobalStylesUserConfig === 'function') {
         editSite.setGlobalStylesUserConfig(variation.config || {});
         return;
@@ -623,8 +825,8 @@
     console.log('WPWM-TVD: Has config:', !!variation.config);
 
     // Log palette colors if available
-    if (variation.config && variation.config.settings && variation.config.settings.color && variation.config.settings.color.palette) {
-      const palette = variation.config.settings.color.palette;
+    const palette = getConfigPath(variation.config, ['settings', 'color', 'palette']);
+    if (palette) {
       console.log('WPWM-TVD: Palette structure:', Array.isArray(palette) ? 'flat array' : 'origin-wrapped object');
       console.log('WPWM-TVD: Palette colors:', palette);
 
@@ -641,9 +843,9 @@
 
     // Try Site Editor API first (only available in Site Editor context)
     try {
-      const editSiteDisp = wp.data.dispatch('core/edit-site');
-      const coreDisp = wp.data.dispatch('core');
-      const coreSel = wp.data.select('core');
+      const editSiteDisp = wp.data.dispatch(WP_STORE_EDIT_SITE);
+      const coreDisp = wp.data.dispatch(WP_STORE_CORE);
+      const coreSel = wp.data.select(WP_STORE_CORE);
 
       console.log('WPWM-TVD: WordPress data stores available:', {
         hasEditSiteDisp: !!editSiteDisp,
@@ -786,7 +988,7 @@
           // Send to server for logging
           try {
             await window.wp.apiFetch({
-              path: 'wpwm-tvd/v1/log-error',
+              path: buildApiPath(API_ENDPOINT_LOG_ERROR),
               method: 'POST',
               data: {
                 variation: variation.title || variation.slug || 'unknown',
@@ -800,10 +1002,10 @@
           }
 
           // Show user-friendly warning
-          if (wp.data.dispatch('core/notices') && wp.data.dispatch('core/notices').createWarningNotice) {
-            wp.data.dispatch('core/notices').createWarningNotice(
+          if (wp.data.dispatch(WP_STORE_NOTICES) && wp.data.dispatch(WP_STORE_NOTICES).createWarningNotice) {
+            wp.data.dispatch(WP_STORE_NOTICES).createWarningNotice(
               'Variation data had ' + errorLog.length + ' issue(s) that were automatically fixed. Check browser console for details.',
-              { type: 'snackbar', isDismissible: true }
+              { type: NOTICE_TYPE_SNACKBAR, isDismissible: true }
             );
           }
         }
@@ -819,12 +1021,12 @@
         if (currentGlobalStylesId && coreDisp.saveEditedEntityRecord) {
           console.log('WPWM-TVD: Saving via Site Editor API...');
           try {
-            await coreDisp.saveEditedEntityRecord('root', 'globalStyles', currentGlobalStylesId);
+            await coreDisp.saveEditedEntityRecord(WP_ENTITY_KIND_ROOT, WP_ENTITY_NAME_GLOBAL_STYLES, currentGlobalStylesId);
             console.log('WPWM-TVD: Save successful!');
-            if (wp.data.dispatch('core/notices') && wp.data.dispatch('core/notices').createSuccessNotice) {
-              wp.data.dispatch('core/notices').createSuccessNotice(
+            if (wp.data.dispatch(WP_STORE_NOTICES) && wp.data.dispatch(WP_STORE_NOTICES).createSuccessNotice) {
+              wp.data.dispatch(WP_STORE_NOTICES).createSuccessNotice(
                 'Variation "' + (variation.title || variation.slug) + '" applied successfully.',
-                { type: 'snackbar', isDismissible: true }
+                { type: NOTICE_TYPE_SNACKBAR, isDismissible: true }
               );
             } else {
               alert('Variation "' + (variation.title || variation.slug) + '" applied successfully.');
@@ -848,7 +1050,7 @@
     console.log('WPWM-TVD: Sending config to REST API:', variation.config);
     try {
       const response = await window.wp.apiFetch({
-        path: 'wpwm-tvd/v1/apply',
+        path: buildApiPath(API_ENDPOINT_APPLY),
         method: 'POST',
         data: variation.config || {}
       });
@@ -885,7 +1087,7 @@
   // Mount in dedicated admin page
   function initAdminPage() {
     console.log('WPWM-TVD: initAdminPage called');
-    const root = document.getElementById('wpwm-tvd-root');
+    const root = document.getElementById(DOM_ID_ROOT);
     console.log('WPWM-TVD: Root element found:', !!root);
     if (!root) return;
 
@@ -918,4 +1120,7 @@
     console.log('WPWM-TVD: Initializing immediately');
     initAdminPage();
   }
-})();
+}
+
+// Initialize immediately
+wpwmThemeVariationDisplay();

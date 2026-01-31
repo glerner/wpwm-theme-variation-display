@@ -268,111 +268,248 @@
 }
 
 /* Preview Page Styles */
-.wpwm-preview-page {
-	background: var(--bg-color);
-	color: var(--text-color);
-	padding: 2rem;
-	border-radius: 8px;
-	max-width: 600px;
+.wpwm-preview {
+	background: var(--wpwm-bg);
+	color: var(--wpwm-fg);
+	padding: 2px;
+	max-width: 760px;
 	margin: 0 auto;
+}
+
+.wpwm-preview a {
+	color: inherit;
+}
+
+.wpwm-preview-card {
+	background: var(--wpwm-bg);
+	color: var(--wpwm-fg);
+	padding: 20px;
 	line-height: 1.6;
 }
 
-.wpwm-preview-page h1,
-.wpwm-preview-page h2,
-.wpwm-preview-page h3 {
-	margin: 0 0 0.75rem 0;
+.wpwm-preview-title {
+	margin: 0 0 12px 0;
+	font-size: 28px;
+	font-weight: 700;
+	color: var(--wpwm-primary);
 }
 
-.wpwm-preview-page p {
+.wpwm-preview-lead {
 	margin: 0;
+	font-size: 16px;
 }
 
-.preview-heading {
-	color: var(--heading-color);
-	font-size: 2rem;
-	margin-bottom: 1rem;
+.wpwm-preview-inline-link {
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	color: var(--wpwm-accent);
 }
 
-.preview-featured {
-	background: var(--featured-bg);
-	color: var(--featured-text);
-	padding: 1.5rem;
-	border-radius: 6px;
-	margin-bottom: 1.5rem;
+.wpwm-preview-inline-link:hover {
+	color: var(--wpwm-accent-hover);
 }
 
-.preview-featured h2 {
-	font-size: 1.5rem;
-	color: var(--featured-text);
+.wpwm-preview-primary-band {
+	margin-top: 16px;
+	background: var(--wpwm-band-bg);
+	color: var(--wpwm-band-fg);
+	padding: 16px;
 }
 
-.preview-subheading {
-	color: var(--heading-color);
-	font-size: 1.25rem;
-}
-
-.preview-list {
-	margin: 0 0 1.5rem 0;
-	padding-left: 1.5rem;
-	line-height: 1.8;
-}
-
-.preview-list li {
-	color: var(--list-color-2);
-}
-
-.preview-list li.list-item-alt {
-	color: var(--list-color-1);
-}
-
-.preview-quote {
-	background: var(--tertiary-light);
-	border-left: 4px solid var(--tertiary-dark);
-	padding: 1rem 1.5rem;
-	margin: 0 0 1.5rem 0;
-	border-radius: 4px;
-}
-
-.preview-quote p {
-	font-style: italic;
-}
-
-.preview-actions {
+.wpwm-preview-primary-band-inner {
 	display: flex;
-	gap: 1rem;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+}
+
+.wpwm-preview-kicker {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	opacity: 0.9;
+}
+
+.wpwm-preview-band-title {
+	margin-top: 6px;
+	font-size: 18px;
+	font-weight: 800;
+}
+
+.wpwm-preview-band-text {
+	margin-top: 6px;
+	font-size: 14px;
+	opacity: 0.95;
+}
+
+.wpwm-preview-accent-cta {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	text-decoration: none;
+	font-weight: 700;
+	padding: 10px 14px;
+	background: var(--wpwm-accent);
+	color: var(--wpwm-primary-contrast);
+}
+
+.wpwm-preview-accent-cta:hover {
+	background: var(--wpwm-accent-hover);
+}
+
+.wpwm-preview-rule {
+	margin: 18px 0;
+	border: 0;
+	border-top: 1px solid #dcdcde;
+}
+
+.wpwm-preview-info-cards {
+	display: flex;
+	gap: 12px;
 	flex-wrap: wrap;
 }
 
-.preview-btn-primary,
-.preview-btn-secondary {
-	display: inline-block;
-	padding: 0.75rem 1.5rem;
-	border-radius: 4px;
+.wpwm-preview-info-card {
+	flex: 1;
+	min-width: 160px;
+	padding: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.wpwm-preview-info-card strong {
+	font-weight: 800;
+}
+
+.wpwm-preview-info-card span {
+	font-size: 13px;
+	opacity: 0.95;
+}
+
+.wpwm-preview-info-card--primary {
+	background: var(--wpwm-primary);
+	color: var(--wpwm-primary-contrast);
+}
+
+.wpwm-preview-info-card--secondary {
+	background: var(--wpwm-secondary);
+	color: var(--wpwm-secondary-contrast);
+}
+
+.wpwm-preview-info-card--tertiary {
+	background: var(--wpwm-tertiary);
+	color: var(--wpwm-tertiary-contrast);
+}
+
+.wpwm-preview-menu {
+	margin-top: 16px;
+	display: flex;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+
+.wpwm-preview-menu-item {
 	text-decoration: none;
-	font-weight: 600;
-	transition: all 0.2s;
+	padding: 8px 10px;
+	background: var(--wpwm-accent);
+	color: var(--wpwm-primary-contrast);
 }
 
-.preview-btn-primary {
-	background: var(--accent-darker);
-	color: white;
-	border: none;
+.wpwm-preview-menu-item:hover {
+	background: var(--wpwm-accent-hover);
 }
 
-.preview-btn-primary:hover {
-	background: var(--accent-dark);
+.wpwm-preview-testimonial {
+	margin-top: 16px;
+	padding: 14px;
+	background: var(--wpwm-testimonial-bg);
+	color: var(--wpwm-testimonial-fg);
+	border: 1px solid #dcdcde;
 }
 
-.preview-btn-secondary {
-	background: transparent;
-	color: var(--accent-darker);
-	border: 2px solid var(--accent-darker);
+.wpwm-preview-testimonial-quote {
+	font-size: 15px;
+	line-height: 1.6;
 }
 
-.preview-btn-secondary:hover {
-	background: var(--accent-darker);
-	color: white;
+.wpwm-preview-testimonial-author {
+	margin-top: 12px;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.wpwm-preview-avatar {
+	width: 36px;
+	height: 36px;
+	border-radius: 999px;
+	background: var(--wpwm-secondary);
+	border: 1px solid #dcdcde;
+	flex: 0 0 auto;
+}
+
+.wpwm-preview-author-name {
+	font-weight: 800;
+}
+
+.wpwm-preview-author-title {
+	font-size: 12px;
+	opacity: 0.9;
+}
+
+.wpwm-preview-list-block {
+	margin-top: 16px;
+}
+
+.wpwm-preview-list {
+	margin: 0;
+	padding-left: 18px;
+	list-style: circle;
+}
+
+.wpwm-preview-list li {
+	padding: 10px 12px;
+}
+
+.wpwm-preview-list li:nth-child(odd) {
+	background: var(--wpwm-list-odd-bg);
+	color: var(--wpwm-list-fg);
+}
+
+.wpwm-preview-list li:nth-child(even) {
+	background: var(--wpwm-list-even-bg);
+	color: var(--wpwm-list-fg);
+}
+
+.wpwm-preview-status-messages {
+	margin-top: 16px;
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 10px;
+}
+
+.wpwm-preview-status {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 12px 14px;
+}
+
+.wpwm-preview-status--error {
+	background: var(--wpwm-status-error-bg);
+	color: var(--wpwm-status-error-fg);
+}
+
+.wpwm-preview-status--notice {
+	background: var(--wpwm-status-notice-bg);
+	color: var(--wpwm-status-notice-fg);
+}
+
+.wpwm-preview-status--success {
+	background: var(--wpwm-status-success-bg);
+	color: var(--wpwm-status-success-fg);
 }
 
 /* Responsive adjustments */
@@ -399,11 +536,11 @@
 		font-size: 13px;
 	}
 
-	.wpwm-preview-page {
-		padding: 1.5rem;
+	.wpwm-preview-card {
+		padding: 16px;
 	}
 
-	.preview-heading {
-		font-size: 1.5rem;
+	.wpwm-preview-title {
+		font-size: 22px;
 	}
 }

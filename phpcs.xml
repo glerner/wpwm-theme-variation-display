@@ -1,0 +1,107 @@
+<?xml version="1.0"?>
+<ruleset name="GL WordPress PHPUnit Testing Framework">
+    <description>Coding standards for GL WordPress PHPUnit Testing Framework</description>
+
+    <!-- Scan all files in directory -->
+    <file>.</file>
+
+    <!-- Scan only PHP files -->
+    <arg name="extensions" value="php"/>
+
+    <!-- Show colors in console -->
+    <arg value="-colors"/>
+
+    <!-- Show sniff codes in all reports -->
+    <arg value="ns"/>
+
+    <!-- Exclude paths -->
+    <exclude-pattern>/vendor/*</exclude-pattern>
+    <exclude-pattern>/node_modules/*</exclude-pattern>
+    <exclude-pattern>/tests/bootstrap/*</exclude-pattern>
+    <exclude-pattern>/build/*</exclude-pattern>
+    <exclude-pattern>/compat/*</exclude-pattern>
+
+    <!-- Include WordPress Coding Standards -->
+    <rule ref="WordPress">
+        <!-- Exclude WordPress-specific rules that don't apply to a library -->
+        <exclude name="WordPress.Files.FileName"/>
+        <exclude name="WordPress.WP.I18n"/>
+        <exclude name="WordPress.WP.GlobalVariablesOverride"/>
+
+        <!-- Exclude minor formatting rules that don't affect functionality -->
+        <exclude name="Squiz.Commenting.InlineComment.InvalidEndChar"/>
+        <exclude name="PEAR.Functions.FunctionCallSignature.SpaceAfterOpenBracket"/>
+        <exclude name="PEAR.Functions.FunctionCallSignature.SpaceBeforeCloseBracket"/>
+        <exclude name="Generic.Formatting.MultipleStatementAlignment"/>
+        <exclude name="WordPress.Arrays.ArrayIndentation"/>
+        <exclude name="WordPress.WhiteSpace.OperatorSpacing"/>
+        <exclude name="WordPress.WhiteSpace.ControlStructureSpacing"/>
+        <exclude name="WordPress.PHP.YodaConditions"/>
+        <!-- Exclude spaces-to-tabs conversion to prevent PHPCBF from getting stuck, use composer run-script spaces_to_tabs instead -->
+        <exclude name="Generic.WhiteSpace.DisallowSpaceIndent"/>
+    </rule>
+
+    <!-- Include PSR-12 Coding Standards -->
+    <rule ref="PSR12">
+        <!-- Exclude PSR-12 indentation rule (should indent with spaces) to avoid conflict with WordPress rule (only indent with tabs) -->
+        <exclude name="Generic.WhiteSpace.DisallowTabIndent"/>
+        <!-- Exclude PSR-12 class naming rule to allow WordPress-style class names with underscores -->
+        <exclude name="Squiz.Classes.ValidClassName.NotCamelCaps"/>
+        <!-- Exclude PSR-12 method naming rule to allow WordPress-style method names with underscores -->
+        <exclude name="PSR1.Methods.CamelCapsMethodName.NotCamelCaps"/>
+    </rule>
+
+    <!-- Include PHPCompatibility -->
+    <rule ref="PHPCompatibilityWP"/>
+
+    <!-- Check for PHP cross-version compatibility (hyphen means "and higher") -->
+    <config name="testVersion" value="8.0-"/>
+
+    <!-- Set minimum supported WP version -->
+    <config name="minimum_supported_wp_version" value="6.1"/>
+
+    <!-- Set text domain -->
+    <config name="text_domain" value="gl-phpunit-testing"/>
+
+    <!-- Set prefixes for checking naming conventions -->
+    <rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+        <properties>
+            <property name="prefixes" type="array">
+                <element value="WP_PHPUnit_Framework"/><!-- For constants and class names -->
+                <element value="wp_phpunit_framework"/><!-- For functions and global variables -->
+                <element value="WP_PHPUnit_Framework\\"/><!-- For namespaces -->
+            </property>
+        </properties>
+    </rule>
+
+    <!-- Custom Rules -->
+    <rule ref="Squiz.Commenting.FunctionComment" />
+    <rule ref="Squiz.Commenting.FunctionCommentThrowTag" />
+    <rule ref="Squiz.Commenting.ClassComment" />
+    <rule ref="Generic.Commenting.DocComment" />
+
+    <!-- Allow WordPress-style class names with underscores (like WP_Mock_Test_Case) -->
+    <rule ref="Squiz.Classes.ValidClassName.NotCamelCaps">
+        <exclude-pattern>*/WP_*.php</exclude-pattern>
+    </rule>
+
+    <!-- Enforce type hints -->
+    <rule ref="SlevomatCodingStandard.TypeHints.ParameterTypeHint">
+        <exclude name="SlevomatCodingStandard.TypeHints.ParameterTypeHint.MissingTraversableTypeHintSpecification"/>
+    </rule>
+    <rule ref="SlevomatCodingStandard.TypeHints.ReturnTypeHint">
+        <exclude name="SlevomatCodingStandard.TypeHints.ReturnTypeHint.MissingTraversableTypeHintSpecification"/>
+        <!-- Disable warning about redundant @return annotations when return type is already declared -->
+        <exclude name="SlevomatCodingStandard.TypeHints.ReturnTypeHint.UselessAnnotation"/>
+    </rule>
+
+    <!-- Disable comment formatting rules that are too strict -->
+    <rule ref="Squiz.Commenting.InlineComment.InvalidEndChar">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Squiz.Commenting.FunctionComment.ParamCommentFullStop">
+        <severity>0</severity>
+    </rule>
+
+
+</ruleset>

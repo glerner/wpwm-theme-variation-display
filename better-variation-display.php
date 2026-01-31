@@ -17,7 +17,9 @@
  * @package WPWM_Theme_Variation_Display
  */
 
-if ( ! defined( 'ABSPATH' ) ) { exit; }
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
 
 // Base paths
 define( 'WPWM_TVD_DIR', plugin_dir_path( __FILE__ ) );
@@ -71,6 +73,9 @@ add_action( 'enqueue_block_editor_assets', function () {
     if ( ! function_exists( 'get_current_screen' ) ) { return; }
     $screen = get_current_screen();
     if ( ! $screen || $screen->base !== 'site-editor' ) { return; }
+
+    // Enqueue error trap first (high priority) to catch errors early
+    wp_enqueue_script( 'wpwm-tvd-error-trap', WPWM_TVD_URL . 'assets/error-trap.js', [], filemtime( WPWM_TVD_DIR . 'assets/error-trap.js' ), false );
 
     wp_enqueue_style( 'wpwm-tvd', WPWM_TVD_URL . 'assets/app.css', [], filemtime( WPWM_TVD_DIR . 'assets/app.css' ) );
     // Enqueue wp-api to expose wpApiSettings.nonce
