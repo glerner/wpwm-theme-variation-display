@@ -182,9 +182,40 @@ function wpwmThemeVariationDisplay() {
     const dark = Math.min(La, Lb);
     return (bright + 0.05) / (dark + 0.05);
   }
+  function oklchToRgb(oklchStr) {
+    const match = oklchStr.match(/oklch\(\s*([0-9.]+)[,\s]+([0-9.]+)[,\s]+([0-9.]+)\s*\)/);
+    if (!match) return null;
+    const L = parseFloat(match[1]);
+    const C = parseFloat(match[2]);
+    const H = parseFloat(match[3]);
+    const hRad = (H * Math.PI) / 180;
+    const a = C * Math.cos(hRad);
+    const b = C * Math.sin(hRad);
+    const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+    const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+    const s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+    const l = l_ * l_ * l_;
+    const m = m_ * m_ * m_;
+    const s = s_ * s_ * s_;
+    let r = +4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+    let g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+    let bVal = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+    const gammaCorrect = (val) => val <= 0.0031308 ? 12.92 * val : 1.055 * Math.pow(val, 1 / 2.4) - 0.055;
+    r = gammaCorrect(r);
+    g = gammaCorrect(g);
+    bVal = gammaCorrect(bVal);
+    return [
+      Math.max(0, Math.min(255, Math.round(r * 255))),
+      Math.max(0, Math.min(255, Math.round(g * 255))),
+      Math.max(0, Math.min(255, Math.round(bVal * 255)))
+    ];
+  }
   function colorStringToRgb(colorStr) {
-    // Try hex
     const colorString = (colorStr || '').trim();
+    if (colorString.startsWith('oklch(')) {
+      const rgb = oklchToRgb(colorString);
+      return rgb || DEFAULT_BLACK_RGB;
+    }
     if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(colorString)) {
       const hex = colorString.length === 4
         ? '#' + colorString[1] + colorString[1] + colorString[2] + colorString[2] + colorString[3] + colorString[3]
@@ -192,7 +223,6 @@ function wpwmThemeVariationDisplay() {
       const n = parseInt(hex.slice(1), 16);
       return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
     }
-    // Else let the browser resolve it
     const tmp = document.createElement('div');
     tmp.style.color = colorString;
     document.body.appendChild(tmp);
@@ -450,23 +480,29 @@ function wpwmThemeVariationDisplay() {
           const swatchBg = getComputedStyle(sw).backgroundColor;
           const label = sw.querySelector('.' + CSS_CLASS_SWATCH_LABEL);
           if (!label) return;
-          const parsedSwatchBg = parseRgbString(swatchBg);
           let bgRGB;
-          if (!parsedSwatchBg) {
-            bgRGB = lightRGB;
-          } else if (parsedSwatchBg.length === 4 && parsedSwatchBg[3] < 1) {
-            bgRGB = compositeRGBAoverRGB(parsedSwatchBg, cardBgRGB);
+          // The WCAG 2.x contrast ratio formula is defined using sRGB relative luminance.
+          // We must convert OKLCH to RGB before calculating contrast for WCAG compliance.
+          if (swatchBg.startsWith('oklch(')) {
+            bgRGB = colorStringToRgb(swatchBg);
           } else {
-            bgRGB = parsedSwatchBg.slice(0, 3);
+            const parsedSwatchBg = parseRgbString(swatchBg);
+            if (!parsedSwatchBg) {
+              bgRGB = lightRGB;
+            } else if (parsedSwatchBg.length === 4 && parsedSwatchBg[3] < 1) {
+              bgRGB = compositeRGBAoverRGB(parsedSwatchBg, cardBgRGB);
+            } else {
+              bgRGB = parsedSwatchBg.slice(0, 3);
+            }
           }
-          // Compare contrast with both candidates (TOK on light vs TOK on dark)
           const cLight = contrastRatioRGB(bgRGB, lightRGB);
           const cDark = contrastRatioRGB(bgRGB, darkRGB);
-          const useDarkText = cDark >= cLight; // choose the higher-contrast text color
-          // Set color via CSS custom property on the swatch element
-          sw.style.setProperty('--label-color', useDarkText ? darkVarStr : lightVarStr);
+          const textColor = cLight >= cDark ? lightVarStr : darkVarStr;
+          sw.style.setProperty('--label-color', textColor);
         });
-      } catch (_e) { /* noop */ }
+      } catch (e) {
+        console.error('WPWM-TVD: Error in applyContrastAwareLabels:', e);
+      }
     });
   }
 
@@ -554,9 +590,17 @@ function wpwmThemeVariationDisplay() {
 
     // Navigation controls
     const nav = el('div', CSS_CLASS_MODAL_NAV);
+    const leftGroup = el('div', 'wpwm-tvd-nav-left');
+    const selectBtn = el('button', CSS_CLASS_NAV_BTN + ' wpwm-tvd-select-btn', 'Select');
     const prevBtn = el('button', CSS_CLASS_NAV_BTN, UI_TEXT.prevBtn);
-    const nextBtn = el('button', CSS_CLASS_NAV_BTN, UI_TEXT.nextBtn);
     const counter = el('span', CSS_CLASS_COUNTER);
+    const nextBtn = el('button', CSS_CLASS_NAV_BTN, UI_TEXT.nextBtn);
+
+    selectBtn.addEventListener('click', () => {
+      const v = allVariations[currentIndex];
+      applyVariation(v);
+      document.body.removeChild(overlay);
+    });
 
     prevBtn.addEventListener('click', () => {
       currentIndex = (currentIndex - 1 + allVariations.length) % allVariations.length;
@@ -568,7 +612,9 @@ function wpwmThemeVariationDisplay() {
       updatePreview();
     });
 
-    nav.appendChild(prevBtn);
+    leftGroup.appendChild(selectBtn);
+    leftGroup.appendChild(prevBtn);
+    nav.appendChild(leftGroup);
     nav.appendChild(counter);
     nav.appendChild(nextBtn);
 
@@ -638,9 +684,10 @@ function wpwmThemeVariationDisplay() {
       };
 
       // Try common WordPress theme slugs and palette generator slugs
-      const bgColor = isDarkMode
-        ? (getColor('base-dark', 'background-dark', 'base') || FALLBACK_COLORS.bgDark)
-        : (getColor('base-light', 'background-light', 'base', 'background') || FALLBACK_COLORS.bgLight);
+      const baseLight = getColor('base-light', 'background-light', 'background') || FALLBACK_COLORS.bgLight;
+      const baseDark = getColor('base-dark', 'background-dark') || FALLBACK_COLORS.bgDark;
+
+      const bgColor = isDarkMode ? baseDark : baseLight;
 
       const textColor = isDarkMode
         ? (getColor('text-on-dark', 'contrast-dark', 'foreground-dark', 'contrast') || FALLBACK_COLORS.textDark)
@@ -686,76 +733,100 @@ function wpwmThemeVariationDisplay() {
 
       previewContent.innerHTML = `
         <div class=\"wpwm-preview\" style=\"
-          --wpwm-bg: ${bgColor};
-          --wpwm-fg: ${textColor};
+          color-scheme: ${isDarkMode ? 'dark' : 'light'};
+          --base-light: ${baseLight};
+          --base-dark: ${baseDark};
           --text-on-light: ${textOnLight};
           --text-on-dark: ${textOnDark};
-          --wpwm-primary: ${isDarkMode ? primaryDark : primaryLight};
-          --wpwm-primary-contrast: ${chooseForeground(isDarkMode ? primaryDark : primaryLight, textOnLight, textOnDark)};
-          --wpwm-secondary: ${isDarkMode ? secondaryDark : secondaryLight};
-          --wpwm-secondary-contrast: ${chooseForeground(isDarkMode ? secondaryDark : secondaryLight, textOnLight, textOnDark)};
-          --wpwm-tertiary: ${isDarkMode ? tertiaryDark : tertiaryLight};
-          --wpwm-tertiary-contrast: ${chooseForeground(isDarkMode ? tertiaryDark : tertiaryLight, textOnLight, textOnDark)};
-          --wpwm-accent: ${isDarkMode ? accentLight : accentDarker};
-          --wpwm-accent-hover: ${isDarkMode ? accentDark : accentDark};
-          --wpwm-band-bg: ${isDarkMode ? primaryDarker : primaryLighter};
-          --wpwm-band-fg: ${chooseForeground(isDarkMode ? primaryDarker : primaryLighter, textOnLight, textOnDark)};
-          --wpwm-list-odd-bg: ${isDarkMode ? secondaryDark : secondaryLight};
-          --wpwm-list-even-bg: ${isDarkMode ? secondaryDarker : secondaryLighter};
-          --wpwm-list-fg: ${chooseForeground(isDarkMode ? secondaryDark : secondaryLight, textOnLight, textOnDark)};
-          --wpwm-testimonial-bg: ${isDarkMode ? tertiaryDarker : tertiaryLighter};
-          --wpwm-testimonial-fg: ${chooseForeground(isDarkMode ? tertiaryDarker : tertiaryLighter, textOnLight, textOnDark)};
-          --wpwm-status-error-bg: ${semanticErrorBg};
-          --wpwm-status-error-fg: ${statusErrorText};
-          --wpwm-status-notice-bg: ${semanticNoticeBg};
-          --wpwm-status-notice-fg: ${statusNoticeText};
-          --wpwm-status-success-bg: ${semanticSuccessBg};
-          --wpwm-status-success-fg: ${statusSuccessText};
-        \">
-          <div class=\"wpwm-preview-card\">
-            <h1 class=\"wpwm-preview-title\">Welcome to Your Site</h1>
-            <p class=\"wpwm-preview-lead\">The quick brown fox <a href=\"#\" class=\"wpwm-preview-inline-link\">jumps over</a> the lazy dog.</p>
+          --primary-light: ${primaryLight};
+          --primary-dark: ${primaryDark};
+          --primary-lighter: ${primaryLighter};
+          --primary-darker: ${primaryDarker};
+          --primary-light-contrast: ${chooseForeground(primaryLight, textOnLight, textOnDark)};
+          --primary-dark-contrast: ${chooseForeground(primaryDark, textOnLight, textOnDark)};
+          --primary-lighter-contrast: ${chooseForeground(primaryLighter, textOnLight, textOnDark)};
+          --primary-darker-contrast: ${chooseForeground(primaryDarker, textOnLight, textOnDark)};
+          --secondary-light: ${secondaryLight};
+          --secondary-dark: ${secondaryDark};
+          --secondary-lighter: ${secondaryLighter};
+          --secondary-darker: ${secondaryDarker};
+          --secondary-light-contrast: ${chooseForeground(secondaryLight, textOnLight, textOnDark)};
+          --secondary-dark-contrast: ${chooseForeground(secondaryDark, textOnLight, textOnDark)};
+          --secondary-lighter-contrast: ${chooseForeground(secondaryLighter, textOnLight, textOnDark)};
+          --secondary-darker-contrast: ${chooseForeground(secondaryDarker, textOnLight, textOnDark)};
+          --tertiary-light: ${tertiaryLight};
+          --tertiary-dark: ${tertiaryDark};
+          --tertiary-lighter: ${tertiaryLighter};
+          --tertiary-darker: ${tertiaryDarker};
+          --tertiary-light-contrast: ${chooseForeground(tertiaryLight, textOnLight, textOnDark)};
+          --tertiary-dark-contrast: ${chooseForeground(tertiaryDark, textOnLight, textOnDark)};
+          --tertiary-lighter-contrast: ${chooseForeground(tertiaryLighter, textOnLight, textOnDark)};
+          --tertiary-darker-contrast: ${chooseForeground(tertiaryDarker, textOnLight, textOnDark)};
+          --accent-light: ${accentLight};
+          --accent-dark: ${accentDark};
+          --accent-lighter: ${accentLighter};
+          --accent-darker: ${accentDarker};
+          --accent-light-contrast: ${chooseForeground(accentLight, textOnLight, textOnDark)};
+          --accent-dark-contrast: ${chooseForeground(accentDark, textOnLight, textOnDark)};
+          --accent-lighter-contrast: ${chooseForeground(accentLighter, textOnLight, textOnDark)};
+          --accent-darker-contrast: ${chooseForeground(accentDarker, textOnLight, textOnDark)};
+          --error-light: ${errorLight};
+          --error-dark: ${errorDark};
+          --error-light-contrast: ${chooseForeground(errorLight, textOnLight, textOnDark)};
+          --error-dark-contrast: ${chooseForeground(errorDark, textOnLight, textOnDark)};
+          --notice-light: ${noticeLight};
+          --notice-dark: ${noticeDark};
+          --notice-light-contrast: ${chooseForeground(noticeLight, textOnLight, textOnDark)};
+          --notice-dark-contrast: ${chooseForeground(noticeDark, textOnLight, textOnDark)};
+          --success-light: ${successLight};
+          --success-dark: ${successDark};
+          --success-light-contrast: ${chooseForeground(successLight, textOnLight, textOnDark)};
+          --success-dark-contrast: ${chooseForeground(successDark, textOnLight, textOnDark)};
+        ">
+          <div class="wpwm-preview-card">
+            <h1 class="wpwm-preview-title">Welcome to Your Site</h1>
+            <p class="wpwm-preview-lead">The quick brown fox <a href="#" class="wpwm-preview-inline-link">jumps over</a> the lazy dog.</p>
 
-            <div class=\"wpwm-preview-primary-band\">
-              <div class=\"wpwm-preview-primary-band-inner\">
+            <div class="wpwm-preview-primary-band">
+              <div class="wpwm-preview-primary-band-inner">
                 <div>
-                  <div class=\"wpwm-preview-kicker\">Featured section</div>
-                  <div class=\"wpwm-preview-band-title\">Build trust with clear, readable colors</div>
-                  <div class=\"wpwm-preview-band-text\">Use Primary for section backgrounds and Accent for links and calls to action.</div>
+                  <div class="wpwm-preview-kicker">Featured section</div>
+                  <div class="wpwm-preview-band-title">Build trust with clear, readable colors</div>
+                  <div class="wpwm-preview-band-text">Use Primary for section backgrounds and Accent for links and calls to action.</div>
                 </div>
-                <div class=\"wpwm-preview-primary-band-ctas\">
-                  <a href=\"#\" class=\"wpwm-preview-accent-cta\">Get started</a>
+                <div class="wpwm-preview-primary-band-ctas">
+                  <a href="#" class="wpwm-preview-accent-cta">Get started</a>
                 </div>
               </div>
             </div>
 
-            <hr class=\"wpwm-preview-rule\" />
+            <hr class="wpwm-preview-rule" />
 
-            <div class=\"wpwm-preview-info-cards\">
-              <div class=\"wpwm-preview-info-card wpwm-preview-info-card--primary\"><strong>Primary Light</strong><span>Text on primary background</span></div>
-              <div class=\"wpwm-preview-info-card wpwm-preview-info-card--secondary\"><strong>Secondary Light</strong><span>Text on secondary background</span></div>
-              <div class=\"wpwm-preview-info-card wpwm-preview-info-card--tertiary\"><strong>Tertiary Light</strong><span>Text on tertiary background</span></div>
+            <div class="wpwm-preview-info-cards">
+              <div class="wpwm-preview-info-card wpwm-preview-info-card--primary"><strong>Primary Light</strong><span>Text on primary background</span></div>
+              <div class="wpwm-preview-info-card wpwm-preview-info-card--secondary"><strong>Secondary Light</strong><span>Text on secondary background</span></div>
+              <div class="wpwm-preview-info-card wpwm-preview-info-card--tertiary"><strong>Tertiary Light</strong><span>Text on tertiary background</span></div>
             </div>
 
-            <nav class=\"wpwm-preview-menu\" aria-label=\"Menu\">
-              <a href=\"#\" class=\"wpwm-preview-menu-item\">Menu item</a>
-              <a href=\"#\" class=\"wpwm-preview-menu-item\">Menu item</a>
-              <a href=\"#\" class=\"wpwm-preview-menu-item\">Menu item</a>
+            <nav class="wpwm-preview-menu" aria-label="Menu">
+              <a href="#" class="wpwm-preview-menu-item">Menu item</a>
+              <a href="#" class="wpwm-preview-menu-item">Menu item</a>
+              <a href="#" class="wpwm-preview-menu-item">Menu item</a>
             </nav>
 
-            <div class=\"wpwm-preview-testimonial\">
-              <div class=\"wpwm-preview-testimonial-quote\">“We switched to a contrast-checked palette and immediately got fewer complaints about readability.”</div>
-              <div class=\"wpwm-preview-testimonial-author\">
-                <div class=\"wpwm-preview-avatar\" aria-hidden=\"true\"></div>
+            <div class="wpwm-preview-testimonial">
+              <div class="wpwm-preview-testimonial-quote">“We switched to a contrast-checked palette and immediately got fewer complaints about readability.”</div>
+              <div class="wpwm-preview-testimonial-author">
+                <div class="wpwm-preview-avatar" aria-hidden="true"></div>
                 <div>
-                  <div class=\"wpwm-preview-author-name\">Alex Rivera</div>
-                  <div class=\"wpwm-preview-author-title\">Site Owner</div>
+                  <div class="wpwm-preview-author-name">Alex Rivera</div>
+                  <div class="wpwm-preview-author-title">Site Owner</div>
                 </div>
               </div>
             </div>
 
-            <div class=\"wpwm-preview-list-block\">
-              <ul class=\"wpwm-preview-list\">
+            <div class="wpwm-preview-list-block">
+              <ul class="wpwm-preview-list">
                 <li>First item</li>
                 <li>Second item</li>
                 <li>Third item</li>
@@ -763,10 +834,10 @@ function wpwmThemeVariationDisplay() {
               </ul>
             </div>
 
-            <div class=\"wpwm-preview-status-messages\" aria-label=\"Status messages demo\">
-              <div class=\"wpwm-preview-status wpwm-preview-status--error\" role=\"alert\"><strong>Error:</strong> Something went wrong. Please try again.</div>
-              <div class=\"wpwm-preview-status wpwm-preview-status--notice\" role=\"status\"><strong>Notice:</strong> Unsaved changes. Don’t forget to save.</div>
-              <div class=\"wpwm-preview-status wpwm-preview-status--success\" role=\"status\"><strong>Success:</strong> Your settings have been saved.</div>
+            <div class="wpwm-preview-status-messages" aria-label="Status messages demo">
+              <div class="wpwm-preview-status wpwm-preview-status--error" role="alert"><strong>Error:</strong> Something went wrong. Please try again.</div>
+              <div class="wpwm-preview-status wpwm-preview-status--notice" role="status"><strong>Notice:</strong> Unsaved changes. Don’t forget to save.</div>
+              <div class="wpwm-preview-status wpwm-preview-status--success" role="status"><strong>Success:</strong> Your settings have been saved.</div>
             </div>
           </div>
         </div>

@@ -243,6 +243,12 @@
 	gap: 16px;
 }
 
+.wpwm-tvd-nav-left {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+}
+
 .wpwm-tvd-nav-btn {
 	padding: 10px 20px;
 	border: 1px solid #2271b1;
@@ -269,8 +275,8 @@
 
 /* Preview Page Styles */
 .wpwm-preview {
-	background: var(--wpwm-bg);
-	color: var(--wpwm-fg);
+	background: light-dark(var(--base-light), var(--base-dark));
+	color: light-dark(var(--text-on-light), var(--text-on-dark));
 	padding: 2px;
 	max-width: 760px;
 	margin: 0 auto;
@@ -281,8 +287,8 @@
 }
 
 .wpwm-preview-card {
-	background: var(--wpwm-bg);
-	color: var(--wpwm-fg);
+	background: light-dark(var(--base-light), var(--base-dark));
+	color: light-dark(var(--text-on-light), var(--text-on-dark));
 	padding: 20px;
 	line-height: 1.6;
 }
@@ -291,7 +297,7 @@
 	margin: 0 0 12px 0;
 	font-size: 28px;
 	font-weight: 700;
-	color: var(--wpwm-primary);
+	color: light-dark(var(--primary-darker), var(--primary-light)) !important;
 }
 
 .wpwm-preview-lead {
@@ -299,20 +305,20 @@
 	font-size: 16px;
 }
 
-.wpwm-preview-inline-link {
+a.wpwm-preview-inline-link {
 	text-decoration: underline;
 	text-underline-offset: 2px;
-	color: var(--wpwm-accent);
+	color: light-dark(var(--accent-darker), var(--accent-light)) !important;
 }
 
-.wpwm-preview-inline-link:hover {
-	color: var(--wpwm-accent-hover);
+a.wpwm-preview-inline-link:hover {
+	color: light-dark(var(--accent-dark), var(--accent-lighter)) !important;
 }
 
 .wpwm-preview-primary-band {
 	margin-top: 16px;
-	background: var(--wpwm-band-bg);
-	color: var(--wpwm-band-fg);
+	background: light-dark(var(--primary-light), var(--primary-darker));
+	color: light-dark(var(--primary-light-contrast), var(--primary-darker-contrast));
 	padding: 16px;
 }
 
@@ -343,19 +349,20 @@
 	opacity: 0.95;
 }
 
-.wpwm-preview-accent-cta {
+a.wpwm-preview-accent-cta {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 	text-decoration: none;
 	font-weight: 700;
 	padding: 10px 14px;
-	background: var(--wpwm-accent);
-	color: var(--wpwm-primary-contrast);
+	background: light-dark(var(--accent-darker), var(--accent-light));
+	color: light-dark(var(--accent-darker-contrast), var(--accent-light-contrast)) !important;
 }
 
-.wpwm-preview-accent-cta:hover {
-	background: var(--wpwm-accent-hover);
+a.wpwm-preview-accent-cta:hover {
+	background: light-dark(var(--accent-dark), var(--accent-lighter));
+	color: light-dark(var(--accent-dark-contrast), var(--accent-lighter-contrast)) !important;
 }
 
 .wpwm-preview-rule {
@@ -389,18 +396,18 @@
 }
 
 .wpwm-preview-info-card--primary {
-	background: var(--wpwm-primary);
-	color: var(--wpwm-primary-contrast);
+	background: light-dark(var(--primary-lighter), var(--primary-dark));
+	color: light-dark(var(--primary-lighter-contrast), var(--primary-dark-contrast));
 }
 
 .wpwm-preview-info-card--secondary {
-	background: var(--wpwm-secondary);
-	color: var(--wpwm-secondary-contrast);
+	background: light-dark(var(--secondary-lighter), var(--secondary-dark));
+	color: light-dark(var(--secondary-lighter-contrast), var(--secondary-dark-contrast));
 }
 
 .wpwm-preview-info-card--tertiary {
-	background: var(--wpwm-tertiary);
-	color: var(--wpwm-tertiary-contrast);
+	background: light-dark(var(--tertiary-lighter), var(--tertiary-dark));
+	color: light-dark(var(--tertiary-lighter-contrast), var(--tertiary-dark-contrast));
 }
 
 .wpwm-preview-menu {
@@ -410,22 +417,23 @@
 	flex-wrap: wrap;
 }
 
-.wpwm-preview-menu-item {
+a.wpwm-preview-menu-item {
 	text-decoration: none;
 	padding: 8px 10px;
-	background: var(--wpwm-accent);
-	color: var(--wpwm-primary-contrast);
+	background: light-dark(var(--accent-darker), var(--accent-light));
+	color: light-dark(var(--accent-darker-contrast), var(--accent-light-contrast)) !important;
 }
 
-.wpwm-preview-menu-item:hover {
-	background: var(--wpwm-accent-hover);
+a.wpwm-preview-menu-item:hover {
+	background: light-dark(var(--accent-dark), var(--accent-lighter));
+	color: light-dark(var(--accent-dark-contrast), var(--accent-lighter-contrast)) !important;
 }
 
 .wpwm-preview-testimonial {
 	margin-top: 16px;
 	padding: 14px;
-	background: var(--wpwm-testimonial-bg);
-	color: var(--wpwm-testimonial-fg);
+	background: light-dark(var(--tertiary-lighter), var(--tertiary-dark));
+	color: light-dark(var(--tertiary-lighter-contrast), var(--tertiary-dark-contrast));
 	border: 1px solid #dcdcde;
 }
 
@@ -445,7 +453,7 @@
 	width: 36px;
 	height: 36px;
 	border-radius: 999px;
-	background: var(--wpwm-secondary);
+	background: light-dark(var(--secondary-light), var(--secondary-dark));
 	border: 1px solid #dcdcde;
 	flex: 0 0 auto;
 }
@@ -474,13 +482,13 @@
 }
 
 .wpwm-preview-list li:nth-child(odd) {
-	background: var(--wpwm-list-odd-bg);
-	color: var(--wpwm-list-fg);
+	background: light-dark(var(--secondary-lighter), var(--secondary-dark));
+	color: light-dark(var(--secondary-lighter-contrast), var(--secondary-dark-contrast));
 }
 
 .wpwm-preview-list li:nth-child(even) {
-	background: var(--wpwm-list-even-bg);
-	color: var(--wpwm-list-fg);
+	background: light-dark(var(--secondary-light), var(--secondary-darker));
+	color: light-dark(var(--secondary-light-contrast), var(--secondary-darker-contrast));
 }
 
 .wpwm-preview-status-messages {
@@ -497,19 +505,20 @@
 	padding: 12px 14px;
 }
 
+/* Status Messages, only -ilght or -dark */
 .wpwm-preview-status--error {
-	background: var(--wpwm-status-error-bg);
-	color: var(--wpwm-status-error-fg);
+	background: light-dark(var(--error-light), var(--error-dark));
+	color: light-dark(var(--error-light-contrast), var(--error-dark-contrast));
 }
 
 .wpwm-preview-status--notice {
-	background: var(--wpwm-status-notice-bg);
-	color: var(--wpwm-status-notice-fg);
+	background: light-dark(var(--notice-light), var(--notice-dark));
+	color: light-dark(var(--notice-light-contrast), var(--notice-dark-contrast));
 }
 
 .wpwm-preview-status--success {
-	background: var(--wpwm-status-success-bg);
-	color: var(--wpwm-status-success-fg);
+	background: light-dark(var(--success-light), var(--success-dark));
+	color: light-dark(var(--success-light-contrast), var(--success-dark-contrast));
 }
 
 /* Responsive adjustments */
