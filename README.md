@@ -81,7 +81,7 @@ Colors are shown, with text color chosen to be legible on the background color.
 
 ![Theme Variation display of Color Palette Generator colors, plus main theme.json colors (included in case website uses them)](assets/WPWM-theme-variation-dIsplay-Color-Palette-Generator-colors-plus-themejson-colors.png)
 
-**Note:** This Theme Variation Viewer is designed for the [WPWM Color Palette Generator](https://github.com/glerner/wpwm-color-palette-generator). For other palettes, colors likely won't be displayed how the theme designer intended.
+**Note:** This Theme Variation Viewer is designed for the [WPWM Color Palette Generator](https://gl-color-palette-generator.vercel.app/). For other palettes, colors likely won't be displayed how the theme designer intended.
 
 ![Twenty Twenty Four and Twenty Twenty Five theme colors and fonts](assets/WPWM-theme-variation-display-TwentyTwentyFour-TwentyTwentyFive-theme-colors-fonts.png)
 

@@ -1347,7 +1347,7 @@ function wpwmThemeVariationDisplay() {
 
       const derivedNote = (!paletteColors.length)
         ? 'No palette colors found; using derived defaults.'
-        : `This Theme Variation Viewer is designed for the <a href="https://github.com/glerner/wpwm-color-palette-generator" target="_blank" rel="noopener">WPWM Color Palette Generator</a>. For other palettes, colors likely won't be displayed how the theme designer intended. (Found ${paletteColors.length} color(s)${placeholderCount > 0 ? `, ${placeholderCount} slot(s) filled with placeholder` : ''})`;
+        : `This Theme Variation Viewer is designed for the <a href="https://gl-color-palette-generator.vercel.app/" target="_blank" rel="noopener">WPWM Color Palette Generator</a>. For other palettes, colors likely won't be displayed how the theme designer intended. (Found ${paletteColors.length} color(s)${placeholderCount > 0 ? `, ${placeholderCount} slot(s) filled with placeholder` : ''})`;
 
       previewContent.innerHTML = `
         <div class=\"wpwm-preview\" style=\"
