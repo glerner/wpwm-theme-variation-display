@@ -70,7 +70,8 @@ function wpwmThemeVariationDisplay() {
   ].join(', ');
 
   // Timing and limits
-  const MAX_FONT_SAMPLES = 2;
+  // Limit font samples to keep card height manageable while showing variety
+  const MAX_FONT_SAMPLES = 5;
   const SITE_EDITOR_MAX_ATTEMPTS = 100;  // ~10 seconds at 100ms intervals
 
   // Default colors
@@ -137,6 +138,25 @@ function wpwmThemeVariationDisplay() {
   // ============================================================================
 
   /**
+   * Consistent error logging with severity levels
+   * @param {string} context - Description of where the error occurred
+   * @param {Error|string} error - The error object or message
+   * @param {string} severity - 'error', 'warn', or 'log' (default: 'error')
+   */
+  function logError(context, error, severity = 'error') {
+    const prefix = 'WPWM-TVD';
+    const message = `${prefix}: ${context}`;
+
+    if (severity === 'error') {
+      console.error(message, error);
+    } else if (severity === 'warn') {
+      console.warn(message, error);
+    } else {
+      console.log(message, error);
+    }
+  }
+
+  /**
    * Safely access deeply nested properties in an object.
    * Returns the value at the path, or defaultValue if any part is missing.
    * @param {Object} obj - The object to traverse
@@ -191,15 +211,25 @@ function wpwmThemeVariationDisplay() {
     // Validate output
     return isNaN(ratio) ? 1 : ratio;
   }
+  /**
+   * Convert OKLCH color string to RGB array
+   * @param {string} oklchStr - OKLCH color in format "oklch(L C H)" where L is 0-1, C is 0-0.4, H is 0-360
+   * @returns {number[]|null} RGB array [r, g, b] (0-255) or null if invalid
+   */
   function oklchToRgb(oklchStr) {
     const match = oklchStr.match(/oklch\(\s*([0-9.]+)[,\s]+([0-9.]+)[,\s]+([0-9.]+)\s*\)/);
     if (!match) return null;
-    const L = parseFloat(match[1]);
-    const C = parseFloat(match[2]);
-    const H = parseFloat(match[3]);
+    let L = parseFloat(match[1]);
+    let C = parseFloat(match[2]);
+    let H = parseFloat(match[3]);
 
     // Validate parsed values
     if (isNaN(L) || isNaN(C) || isNaN(H)) return null;
+
+    // Clamp values to valid OKLCH ranges
+    L = Math.max(0, Math.min(1, L));
+    C = Math.max(0, Math.min(0.4, C));
+    H = ((H % 360) + 360) % 360;
 
     const hRad = (H * Math.PI) / 180;
     const a = C * Math.cos(hRad);
@@ -227,6 +257,11 @@ function wpwmThemeVariationDisplay() {
 
     return [rFinal, gFinal, bFinal];
   }
+  /**
+   * Convert color string to RGB array, supporting hex, OKLCH, and CSS color formats
+   * @param {string} colorStr - Color string in any supported format
+   * @returns {number[]} RGB array [r, g, b] (0-255)
+   */
   function colorStringToRgb(colorStr) {
     const colorString = (colorStr || '').trim();
     if (colorString.startsWith('oklch(')) {
@@ -252,6 +287,41 @@ function wpwmThemeVariationDisplay() {
     tmp.remove();
     const parsed = parseRgbString(rgb);
     return parsed ? parsed.slice(0, 3) : DEFAULT_BLACK_RGB;
+  }
+
+  /**
+   * Sanitize color value to prevent XSS via innerHTML injection
+   * @param {string} colorStr - Color value to sanitize
+   * @returns {string} Sanitized color value or empty string if unsafe
+   */
+  function sanitizeColorValue(colorStr) {
+    if (!colorStr || typeof colorStr !== 'string') return '';
+    const s = colorStr.trim();
+
+    // Allow safe CSS color formats only
+    // Hex colors
+    if (/^#[0-9a-f]{3,8}$/i.test(s)) return s;
+
+    // RGB/RGBA
+    if (/^rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+(?:\s*,\s*[\d.]+)?\s*\)$/i.test(s)) return s;
+    if (/^rgba?\(\s*\d+\s+\d+\s+\d+(?:\s*\/\s*[\d.]+%?)?\s*\)$/i.test(s)) return s;
+
+    // OKLCH
+    if (/^oklch\(\s*[\d.]+\s+[\d.]+\s+[\d.]+(?:\s*\/\s*[\d.]+%?)?\s*\)$/i.test(s)) return s;
+
+    // Color-mix
+    if (/^color-mix\(in\s+srgb\s*,\s*[^)]+\)$/i.test(s)) return s;
+
+    // CSS var() references
+    if (/^var\(--[a-z0-9-]+\)$/i.test(s)) return s;
+
+    // Named CSS colors (basic set)
+    const namedColors = ['transparent', 'currentcolor', 'inherit', 'initial', 'unset'];
+    if (namedColors.includes(s.toLowerCase())) return s;
+
+    // If it doesn't match safe patterns, return empty string
+    console.warn('WPWM-TVD: Potentially unsafe color value filtered:', colorStr);
+    return '';
   }
 
   function parseColorToRgba(colorStr) {
@@ -288,10 +358,10 @@ function wpwmThemeVariationDisplay() {
 
   function compositeRGBAoverRGB(fgRGBA, bgRGB) {
     const [fr, fg, fb, fa = 1] = fgRGBA;
-    const [br, bgGreen, bb] = bgRGB;
+    const [br, bg, bb] = bgRGB;
     const a = fa;
     const outR = Math.round(fr * a + br * (1 - a));
-    const outG = Math.round(fg * a + bgGreen * (1 - a));
+    const outG = Math.round(fg * a + bg * (1 - a));
     const outB = Math.round(fb * a + bb * (1 - a));
 
     // Validate output to prevent NaN propagation
@@ -338,7 +408,10 @@ function wpwmThemeVariationDisplay() {
       const path = buildApiPath(API_ENDPOINT_VARIATIONS);
       const res = await window.wp.apiFetch({ path });
       return res.variations || [];
-    } catch (e) { console.error('WPWM-TVD fetch error', e); return []; }
+    } catch (e) {
+      logError('fetch error', e);
+      return [];
+    }
   }
 
   async function getCurrentVariation() {
@@ -579,7 +652,7 @@ function wpwmThemeVariationDisplay() {
           sw.style.setProperty('--label-color', textColor);
         });
       } catch (e) {
-        console.error('WPWM-TVD: Error in applyContrastAwareLabels:', e);
+        logError('Error in applyContrastAwareLabels', e);
       }
     });
   }
@@ -629,6 +702,637 @@ function wpwmThemeVariationDisplay() {
 
     // After insertion, compute contrast (WCAG) and set label colors
     applyContrastAwareLabels(card);
+  }
+
+  function resolvePreviewColors(variation, isDarkMode) {
+    const palette = getConfigPath(variation.config, ['settings', 'color', 'palette'], []);
+    const cssString = getConfigPath(variation.config, ['styles', 'css'], '');
+
+    const PLACEHOLDER_COLOR = '#10b981';
+
+    // Parse CSS variables from the styles.css string
+    const cssVars = {};
+    if (cssString) {
+      const varMatches = cssString.matchAll(/--([a-z0-9-]+)\s*:\s*([^;]+);/gi);
+      for (const match of varMatches) {
+        const varName = match[1];
+        let varValue = match[2].trim();
+        if (varValue.startsWith('var(')) {
+          const nestedVar = varValue.match(/var\(--([a-z0-9-]+)\)/i);
+          if (nestedVar && cssVars[nestedVar[1]]) {
+            varValue = cssVars[nestedVar[1]];
+          }
+        }
+        cssVars[varName] = varValue;
+      }
+    }
+
+    function resolveStyleColorValue(colorValue) {
+      if (!colorValue) return null;
+      let c = (colorValue || '').toString().trim();
+      if (!c) return null;
+
+      // WP theme.json may use preset tokens like: var:preset|color|contrast
+      // Convert them into valid CSS var() references.
+      if (c.includes('var:preset|color|')) {
+        c = c.replace(/var:preset\|color\|([a-z0-9-]+)/gi, 'var(--wp--preset--color--$1)');
+      }
+
+      // Prefer resolving WP preset vars to the actual variation palette values.
+      // This makes the preview independent of whether :root defines the preset var.
+      // Example: var(--wp--preset--color--contrast) -> "#1b1b1b" (from settings.color.palette).
+      const resolveWpPresetColorFromPalette = (varName) => {
+        const prefix = 'wp--preset--color--';
+        if (!varName || !varName.startsWith(prefix)) return null;
+        const slug = varName.slice(prefix.length);
+        if (!slug) return null;
+
+        const entry = Array.isArray(palette)
+          ? palette.find(e => e && typeof e === 'object' && (e.slug || e.name) === slug)
+          : null;
+        if (!entry) return null;
+
+        let val = entry.color;
+        if (typeof val !== 'string') return null;
+        val = val.trim();
+        if (!val) return null;
+
+        // Resolve var(--x) through styles.css parsed vars if available.
+        if (val.startsWith('var(')) {
+          const m = val.match(/var\(--([a-z0-9-]+)\)/i);
+          if (m && cssVars[m[1]]) {
+            const resolved = (cssVars[m[1]] || '').trim();
+            if (resolved && !resolved.startsWith('var(')) return resolved;
+          }
+        }
+
+        // If it's a WP token, normalize it; otherwise return as-is.
+        if (val.includes('var:preset|color|')) {
+          val = val.replace(/var:preset\|color\|([a-z0-9-]+)/gi, 'var(--wp--preset--color--$1)');
+        }
+
+        return val;
+      };
+
+      // Replace any occurrence(s) of WP preset vars in complex expressions.
+      // This covers cases like: color-mix(in srgb, var(--wp--preset--color--contrast) 85%, transparent)
+      if (c.includes('var(--wp--preset--color--')) {
+        c = c.replace(/var\(--(wp--preset--color--[a-z0-9-]+)\)/gi, (full, varName) => {
+          const fromPalette = resolveWpPresetColorFromPalette(varName);
+          if (fromPalette && !fromPalette.startsWith('var(')) return fromPalette;
+          return full;
+        });
+      }
+
+      // Resolve var(--x) using parsed CSS vars when possible
+      if (c.startsWith('var(')) {
+        const varMatch = c.match(/var\(--([a-z0-9-]+)\)/i);
+        if (varMatch && cssVars[varMatch[1]]) {
+          const resolved = (cssVars[varMatch[1]] || '').trim();
+          if (resolved && !resolved.startsWith('var(')) return resolved;
+        }
+
+        // If it's a WP preset var, try resolving from the variation palette.
+        if (varMatch && varMatch[1] && varMatch[1].startsWith('wp--preset--color--')) {
+          const fromPalette = resolveWpPresetColorFromPalette(varMatch[1]);
+          if (fromPalette && !fromPalette.startsWith('var(')) return fromPalette;
+        }
+
+        // Try resolving WP preset vars from :root (common in default theme variations)
+        if (varMatch && varMatch[1] && varMatch[1].startsWith('wp--preset--')) {
+          try {
+            const rootVal = getComputedStyle(document.documentElement)
+              .getPropertyValue(`--${varMatch[1]}`)
+              .trim();
+            if (rootVal && !rootVal.startsWith('var(')) return rootVal;
+          } catch (e) {/* noop */ }
+        }
+
+        // Keep the var() reference for CSS assignment even if we can't resolve it.
+        return c;
+      }
+
+      // Accept common CSS colors we can measure
+      if (c.startsWith('#') || c.startsWith('rgb(') || c.startsWith('rgba(') || c.startsWith('oklch(') || c.startsWith('color(')) {
+        return c;
+      }
+
+      return c;
+    }
+
+    // Get button colors from theme.json styles when available
+    // const buttonBgFromStyles = resolveStyleColorValue(getConfigPath(variation.config, ['styles', 'elements', 'button', 'color', 'background']));
+    const buttonTextFromStyles = resolveStyleColorValue(getConfigPath(variation.config, ['styles', 'elements', 'button', 'color', 'text']));
+
+    const buttonHoverBgFromStyles =
+      resolveStyleColorValue(getConfigPath(variation.config, ['styles', 'elements', 'button', ':hover', 'color', 'background'])) ||
+      resolveStyleColorValue(getConfigPath(variation.config, ['styles', 'elements', 'button', 'hover', 'color', 'background']));
+    const buttonHoverTextFromStyles =
+      resolveStyleColorValue(getConfigPath(variation.config, ['styles', 'elements', 'button', ':hover', 'color', 'text'])) ||
+      resolveStyleColorValue(getConfigPath(variation.config, ['styles', 'elements', 'button', 'hover', 'color', 'text']));
+
+    // Get color values from palette - resolve var() references to actual colors
+    const getColor = (...slugPatterns) => {
+      for (const pattern of slugPatterns) {
+        const paletteEntry = palette.find(c => c.slug && c.slug.includes(pattern));
+        if (paletteEntry) {
+          let color = paletteEntry.color;
+          // If color is a CSS variable, resolve it
+          if (color && color.startsWith('var(')) {
+            const varMatch = color.match(/var\(--([a-z0-9-]+)\)/i);
+            if (varMatch && cssVars[varMatch[1]]) {
+              color = cssVars[varMatch[1]];
+            }
+          }
+          // Return if we have a real color value (not another var)
+          if (color && !color.startsWith('var(')) {
+            return color;
+          }
+        }
+      }
+      return null;
+    };
+
+    function normalizePaletteEntries(paletteEntries) {
+      if (!Array.isArray(paletteEntries)) return [];
+      const out = [];
+      // Use a neutral mid-gray background for compositing colors with alpha
+      const neutralBg = [128, 128, 128];
+
+      for (const entry of paletteEntries) {
+        if (!entry || typeof entry !== 'object') continue;
+        const slug = (entry.slug || entry.name || '').toString();
+        const rawColor = entry.color;
+        let resolved = rawColor;
+        if (resolved && typeof resolved === 'string' && resolved.trim().startsWith('var(')) {
+          const varMatch = resolved.match(/var\(--([a-z0-9-]+)\)/i);
+          if (varMatch && cssVars[varMatch[1]]) {
+            resolved = cssVars[varMatch[1]];
+          }
+        }
+        resolved = resolveStyleColorValue(resolved);
+
+        // Composite colors with alpha over neutral background to ensure all palette colors are opaque
+        if (resolved && typeof resolved === 'string') {
+          const rgba = parseColorToRgba(resolved);
+          if (rgba && rgba[3] < 1) {
+            // Has alpha channel - composite it
+            const composited = compositeRGBAoverRGB(rgba, neutralBg);
+            resolved = `rgb(${composited[0]}, ${composited[1]}, ${composited[2]})`;
+          }
+        }
+
+        out.push({ slug, raw: rawColor, color: resolved });
+      }
+      return out;
+    }
+
+    const normalizedPalette = normalizePaletteEntries(palette);
+    const paletteColors = normalizedPalette
+      .map(e => e.color)
+      .filter(Boolean);
+
+    // Derive base colors from palette by luminance (prefer opaque colors)
+    const opaqueCandidates = paletteColors.filter(c => isOpaqueColor(c));
+    const baseCandidates = opaqueCandidates.length ? opaqueCandidates : paletteColors;
+
+    function byLuminanceAsc(a, b) {
+      const La = rgbToLuminance(colorStringToRgb(a));
+      const Lb = rgbToLuminance(colorStringToRgb(b));
+      return La - Lb;
+    }
+
+    const sortedByLum = baseCandidates.slice().sort(byLuminanceAsc);
+    const derivedBaseLight = sortedByLum.length ? sortedByLum[sortedByLum.length - 1] : PLACEHOLDER_COLOR;
+    const derivedBaseDark = sortedByLum.length ? sortedByLum[0] : PLACEHOLDER_COLOR;
+
+    // Derive text colors based on page backgrounds
+    const derivedTextOnLight = (() => {
+      const candidates = paletteColors.length ? paletteColors : [DEFAULT_LIGHT_TEXT, DEFAULT_DARK_TEXT];
+      let best = candidates[0];
+      let bestC = 0;
+      const bgRgb = colorStringToRgb(derivedBaseLight);
+      for (const c of candidates) {
+        const fgRgb = compositeColorStringOverBg(c, bgRgb);
+        const cr = contrastRatioRGB(bgRgb, fgRgb);
+        if (cr > bestC) {
+          bestC = cr;
+          best = c;
+        }
+      }
+      return best || DEFAULT_LIGHT_TEXT;
+    })();
+
+    const derivedTextOnDark = (() => {
+      const candidates = paletteColors.length ? paletteColors : [DEFAULT_LIGHT_TEXT, DEFAULT_DARK_TEXT];
+      let best = candidates[0];
+      let bestC = 0;
+      const bgRgb = colorStringToRgb(derivedBaseDark);
+      for (const c of candidates) {
+        const fgRgb = compositeColorStringOverBg(c, bgRgb);
+        const cr = contrastRatioRGB(bgRgb, fgRgb);
+        if (cr > bestC) {
+          bestC = cr;
+          best = c;
+        }
+      }
+      return best || DEFAULT_DARK_TEXT;
+    })();
+
+    function bestForegroundColor(bgColor, candidates) {
+      const bgRgb = colorStringToRgb(bgColor);
+      let best = (candidates && candidates.length) ? candidates[0] : (DEFAULT_LIGHT_TEXT);
+      let bestC = 0;
+      for (const c of (candidates || [])) {
+        if (!c) continue;
+        const fgRgb = compositeColorStringOverBg(c, bgRgb);
+        const cr = contrastRatioRGB(bgRgb, fgRgb);
+        if (cr > bestC) {
+          bestC = cr;
+          best = c;
+        }
+      }
+      return best;
+    }
+
+    // Sequentially assign remaining colors to preview roles
+    const used = new Set([derivedBaseLight, derivedBaseDark, derivedTextOnLight, derivedTextOnDark]);
+    const remaining = paletteColors.filter(c => !used.has(c));
+    const assigned = []; // Track colors as they're assigned for reuse
+    let remIdx = 0;
+    let cycleIdx = 0;
+    const nextColor = () => {
+      // First, use remaining unused colors
+      if (remIdx < remaining.length) {
+        const color = remaining[remIdx++];
+        assigned.push(color);
+        return color;
+      }
+      // When remaining is empty, cycle through already-assigned colors
+      if (assigned.length > 0) {
+        const color = assigned[cycleIdx % assigned.length];
+        cycleIdx++;
+        return color;
+      }
+      // Only use placeholder if we have no colors at all
+      return PLACEHOLDER_COLOR;
+    };
+
+    // Initialize all preview role colors to placeholder
+    const previewColors = {
+      baseLight: derivedBaseLight,
+      baseDark: derivedBaseDark,
+      textOnLight: derivedTextOnLight,
+      textOnDark: derivedTextOnDark,
+      primaryLight: PLACEHOLDER_COLOR,
+      primaryDark: PLACEHOLDER_COLOR,
+      primaryLighter: PLACEHOLDER_COLOR,
+      primaryDarker: PLACEHOLDER_COLOR,
+      secondaryLight: PLACEHOLDER_COLOR,
+      secondaryDark: PLACEHOLDER_COLOR,
+      secondaryLighter: PLACEHOLDER_COLOR,
+      secondaryDarker: PLACEHOLDER_COLOR,
+      tertiaryLight: PLACEHOLDER_COLOR,
+      tertiaryDark: PLACEHOLDER_COLOR,
+      tertiaryLighter: PLACEHOLDER_COLOR,
+      tertiaryDarker: PLACEHOLDER_COLOR,
+      accentLight: PLACEHOLDER_COLOR,
+      accentDark: PLACEHOLDER_COLOR,
+      accentLighter: PLACEHOLDER_COLOR,
+      accentDarker: PLACEHOLDER_COLOR,
+      errorLight: PLACEHOLDER_COLOR,
+      errorDark: PLACEHOLDER_COLOR,
+      noticeLight: PLACEHOLDER_COLOR,
+      noticeDark: PLACEHOLDER_COLOR,
+      successLight: PLACEHOLDER_COLOR,
+      successDark: PLACEHOLDER_COLOR,
+    };
+
+    // Prefer semantic slugs if present, otherwise fill sequentially
+    const baseLightExplicit = getColor('base-light', 'background-light', 'background');
+    const baseDarkExplicit = getColor('base-dark', 'background-dark');
+    const baseSingle = getColor('base', 'basecolor');
+    const contrastSingle = getColor('contrast', 'contrastcolor');
+    const contrast2 = getColor('contrast-2');
+    const contrast3 = getColor('contrast-3');
+
+    let baseLight = baseLightExplicit || previewColors.baseLight;
+    let baseDark = baseDarkExplicit || previewColors.baseDark;
+
+    // Common WP default themes: base + contrast. base is usually light but not guaranteed.
+    if (!baseLightExplicit && !baseDarkExplicit && baseSingle) {
+      const L = rgbToLuminance(colorStringToRgb(baseSingle));
+      if (L >= 0.5) {
+        baseLight = baseSingle;
+      } else {
+        baseDark = baseSingle;
+      }
+    }
+
+    let textOnLight = getColor('text-on-light', 'contrast-light', 'foreground-light', 'foreground') || previewColors.textOnLight;
+    let textOnDark = getColor('text-on-dark', 'contrast-dark', 'foreground-dark') || previewColors.textOnDark;
+
+    // If we have base/contrast, treat contrast as the intended text color on base.
+    if (contrastSingle) {
+      if (baseSingle && baseLight === baseSingle) textOnLight = contrastSingle;
+      if (baseSingle && baseDark === baseSingle) textOnDark = contrastSingle;
+    } else {
+      // Use numbered contrast entries if needed (common in WP default variations)
+      if (baseSingle && baseLight === baseSingle) {
+        textOnLight = contrast2 || contrast3 || textOnLight;
+      }
+      if (baseSingle && baseDark === baseSingle) {
+        textOnDark = contrast2 || contrast3 || textOnDark;
+      }
+    }
+
+    // Fill accents first
+    // 1) If a slug matches accent*, use that.
+    // 2) Otherwise, if theme.json defines button background, treat that as accent.
+    const accentSeed =
+      getColor('accent-darker', 'accent-dark', 'accent-light', 'accent-lighter', 'accent', 'accent-1', 'accent-2', 'accent-3', 'accent-4', 'accent-5') ||
+      buttonBgFromStyles ||
+      nextColor();
+    previewColors.accentLight = accentSeed;
+    previewColors.accentDark = accentSeed;
+    previewColors.accentLighter = accentSeed;
+    previewColors.accentDarker = accentSeed;
+
+    // Primary/secondary/tertiary next
+    const primarySeed = getColor('primary') || nextColor();
+    previewColors.primaryLight = primarySeed;
+    previewColors.primaryDark = primarySeed;
+    previewColors.primaryLighter = primarySeed;
+    previewColors.primaryDarker = primarySeed;
+
+    const secondarySeed = getColor('secondary') || nextColor();
+    previewColors.secondaryLight = secondarySeed;
+    previewColors.secondaryDark = secondarySeed;
+    previewColors.secondaryLighter = secondarySeed;
+    previewColors.secondaryDarker = secondarySeed;
+
+    const tertiarySeed = getColor('tertiary') || nextColor();
+    previewColors.tertiaryLight = tertiarySeed;
+    previewColors.tertiaryDark = tertiarySeed;
+    previewColors.tertiaryLighter = tertiarySeed;
+    previewColors.tertiaryDarker = tertiarySeed;
+
+    // Status colors last
+    const errorSeed = getColor('error') || nextColor();
+    previewColors.errorLight = errorSeed;
+    previewColors.errorDark = errorSeed;
+    const noticeSeed = getColor('warning', 'notice') || nextColor();
+    previewColors.noticeLight = noticeSeed;
+    previewColors.noticeDark = noticeSeed;
+    const successSeed = getColor('success') || nextColor();
+    previewColors.successLight = successSeed;
+    previewColors.successDark = successSeed;
+
+    const chooseForeground = (bgColor, textOnLight, textOnDark) => {
+      let bgRgb;
+      try {
+        bgRgb = colorStringToRgb(bgColor);
+      } catch (e) {
+        return textOnLight;
+      }
+      const tolRgb = compositeColorStringOverBg(textOnLight, bgRgb);
+      const todRgb = compositeColorStringOverBg(textOnDark, bgRgb);
+      const cLight = contrastRatioRGB(bgRgb, tolRgb);
+      const cDark = contrastRatioRGB(bgRgb, todRgb);
+      return cLight >= cDark ? textOnLight : textOnDark;
+    };
+
+    const pickColor = (...vals) => {
+      for (const v of vals) {
+        if (typeof v !== 'string') continue;
+        const s = v.trim();
+        if (!s) continue;
+        if (s === 'undefined' || s === 'null') continue;
+        return s;
+      }
+      return PLACEHOLDER_COLOR;
+    };
+
+    const bgColor = isDarkMode ? baseDark : baseLight;
+
+    const primaryLight = getColor('primary-light') || previewColors.primaryLight;
+    const primaryDark = getColor('primary-dark') || previewColors.primaryDark;
+    const primaryLighter = getColor('primary-lighter') || previewColors.primaryLighter;
+    const primaryDarker = getColor('primary-darker') || previewColors.primaryDarker;
+
+    const secondaryLight = getColor('secondary-light') || previewColors.secondaryLight;
+    const secondaryDark = getColor('secondary-dark') || previewColors.secondaryDark;
+    const secondaryLighter = getColor('secondary-lighter') || previewColors.secondaryLighter;
+    const secondaryDarker = getColor('secondary-darker') || previewColors.secondaryDarker;
+
+    const tertiaryLight = getColor('tertiary-light') || previewColors.tertiaryLight;
+    const tertiaryDark = getColor('tertiary-dark') || previewColors.tertiaryDark;
+    const tertiaryLighter = getColor('tertiary-lighter') || previewColors.tertiaryLighter;
+    const tertiaryDarker = getColor('tertiary-darker') || previewColors.tertiaryDarker;
+
+    const accentLight = pickColor(getColor('accent-light'), previewColors.accentLight);
+    const accentDark = pickColor(getColor('accent-dark'), previewColors.accentDark);
+    const accentLighter = pickColor(getColor('accent-lighter'), previewColors.accentLighter);
+    const accentDarker = pickColor(getColor('accent-darker'), previewColors.accentDarker);
+
+    // Build a reusable color pool from palette (excluding page bg/text and placeholders)
+    // This allows semantic colors to reuse palette colors instead of falling back to PLACEHOLDER_COLOR
+    const normalizeColorForComparison = (color) => {
+      if (!color || typeof color !== 'string') return '';
+      // Normalize hex colors to lowercase without spaces
+      return color.toLowerCase().trim().replace(/\s+/g, '');
+    };
+
+    const baseNorm = normalizeColorForComparison(baseLight);
+    const darkNorm = normalizeColorForComparison(baseDark);
+    const textLightNorm = normalizeColorForComparison(textOnLight);
+    const textDarkNorm = normalizeColorForComparison(textOnDark);
+    const placeholderNorm = normalizeColorForComparison(PLACEHOLDER_COLOR);
+
+    const reusableColors = paletteColors.filter(c => {
+      if (!c || typeof c !== 'string') return false;
+      const normalized = normalizeColorForComparison(c);
+      // Exclude only exact matches of page backgrounds and text colors
+      if (normalized === baseNorm || normalized === darkNorm) return false;
+      if (normalized === textLightNorm || normalized === textDarkNorm) return false;
+      // Exclude placeholder color
+      if (normalized === placeholderNorm) return false;
+      return true;
+    });
+
+    // Helper to pick from palette pool with fallback
+    const pickFromPalette = (preferredColor, fallbackIndex = 0) => {
+      if (preferredColor && preferredColor !== PLACEHOLDER_COLOR) return preferredColor;
+      return reusableColors[fallbackIndex % Math.max(1, reusableColors.length)] || PLACEHOLDER_COLOR;
+    };
+
+    // For minimal palettes, reuse colors from the palette instead of falling back to placeholder
+    // All colors are already opaque from normalizePaletteEntries
+    const errorLight = getColor('error-light') || pickFromPalette(previewColors.errorLight, 0);
+    const errorDark = getColor('error-dark') || pickFromPalette(previewColors.errorDark, 0);
+    const noticeLight = getColor('warning-light', 'notice-light') || pickFromPalette(previewColors.noticeLight, 1);
+    const noticeDark = getColor('warning-dark', 'notice-dark') || pickFromPalette(previewColors.noticeDark, 1);
+    const successLight = getColor('success-light') || pickFromPalette(previewColors.successLight, 2);
+    const successDark = getColor('success-dark') || pickFromPalette(previewColors.successDark, 2);
+
+    // Prefer theme.json button colors when available
+    // FUTURE ENHANCEMENT: For gradient backgrounds, extract the first color from the gradient
+    // and use that for contrast calculation instead of falling back to placeholder.
+    const ctaBgLight = pickColor(buttonBgFromStyles, accentDarker, primaryDarker, primaryDark, PLACEHOLDER_COLOR);
+    const ctaBgDark = pickColor(buttonBgFromStyles, accentLight, primaryLight, primaryLighter, PLACEHOLDER_COLOR);
+
+    // If CTA background is transparent, calculate text against the underlying page background
+    const ctaBgLightForContrast = (ctaBgLight && ctaBgLight.toLowerCase().trim() === 'transparent') ? baseLight : ctaBgLight;
+    const ctaBgDarkForContrast = (ctaBgDark && ctaBgDark.toLowerCase().trim() === 'transparent') ? baseDark : ctaBgDark;
+
+    const ctaTextLight = chooseForeground(ctaBgLightForContrast, textOnLight, textOnDark);
+    const ctaTextDark = chooseForeground(ctaBgDarkForContrast, textOnLight, textOnDark);
+
+    const ctaHoverBgLight = pickColor(buttonHoverBgFromStyles, accentDark, ctaBgLight, PLACEHOLDER_COLOR);
+    const ctaHoverBgDark = pickColor(buttonHoverBgFromStyles, accentLighter, ctaBgDark, PLACEHOLDER_COLOR);
+
+    const effectiveBgForContrast = (bgString, underlyingBgString) => {
+      if (typeof bgString !== 'string' || typeof underlyingBgString !== 'string') return bgString;
+      // Normalize whitespace including newlines to single spaces
+      const s = bgString.replace(/\s+/g, ' ').trim();
+      if (!s) return bgString;
+
+      // Helper to composite RGBA over RGB background
+      const compositeRgbOverBg = (fgRgba, bgRgb) => {
+        const [r, g, b, a = 1] = [fgRgba.r, fgRgba.g, fgRgba.b, fgRgba.a];
+        const [br, bg, bb] = bgRgb;
+        const outR = Math.round(r * a + br * (1 - a));
+        const outG = Math.round(g * a + bg * (1 - a));
+        const outB = Math.round(b * a + bb * (1 - a));
+
+        // Validate output to prevent NaN propagation
+        if (isNaN(outR) || isNaN(outG) || isNaN(outB)) {
+          return { r: br, g: bg, b: bb };
+        }
+
+        return { r: outR, g: outG, b: outB };
+      };
+
+      // Handle: color-mix(in srgb, <colorA> P%, <colorB>)
+      // If colorB is transparent: composite colorA with alpha P% over underlying background
+      // Otherwise: mix colorA and colorB at the specified percentages
+      const m = s.match(/color-mix\(\s*in\s+srgb\s*,\s*([^,]+?)\s+(\d+(?:\.\d+)?)%\s*,\s*([^\)]+?)\s*\)/i);
+      if (m) {
+        const aRaw = (m[1] || '').trim();
+        const pct = Math.max(0, Math.min(100, parseFloat(m[2] || '0')));
+        const bRaw = (m[3] || '').trim();
+        const wa = pct / 100;
+        const wb = 1 - wa;
+
+        try {
+          const aRgb = colorStringToRgb(aRaw);
+
+          // Validate that we got a valid RGB array
+          if (!aRgb || !Array.isArray(aRgb) || aRgb.length < 3) {
+            return PLACEHOLDER_COLOR;
+          }
+
+          if (bRaw.toLowerCase() === 'transparent') {
+            const underRgb = colorStringToRgb(underlyingBgString);
+
+            // Validate underlying background RGB
+            if (!underRgb || !Array.isArray(underRgb) || underRgb.length < 3) {
+              return PLACEHOLDER_COLOR;
+            }
+
+            const composited = compositeRgbOverBg({ r: aRgb[0], g: aRgb[1], b: aRgb[2], a: wa }, underRgb);
+
+            // Validate that we got valid numbers; fall back to placeholder if computation failed
+            if (isNaN(composited.r) || isNaN(composited.g) || isNaN(composited.b)) {
+              return PLACEHOLDER_COLOR;
+            }
+
+            return `rgb(${composited.r} ${composited.g} ${composited.b})`;
+          }
+
+          const bRgb = colorStringToRgb(bRaw);
+
+          // Validate second color RGB
+          if (!bRgb || !Array.isArray(bRgb) || bRgb.length < 3) {
+            return PLACEHOLDER_COLOR;
+          }
+
+          const mixed = {
+            r: Math.round(aRgb[0] * wa + bRgb[0] * wb),
+            g: Math.round(aRgb[1] * wa + bRgb[1] * wb),
+            b: Math.round(aRgb[2] * wa + bRgb[2] * wb),
+          };
+
+          // Validate that we got valid numbers; fall back to placeholder if computation failed
+          if (isNaN(mixed.r) || isNaN(mixed.g) || isNaN(mixed.b)) {
+            return PLACEHOLDER_COLOR;
+          }
+
+          return `rgb(${mixed.r} ${mixed.g} ${mixed.b})`;
+        } catch (e) {
+          // If color parsing or computation fails, use placeholder color
+          return PLACEHOLDER_COLOR;
+        }
+      }
+
+      return bgString;
+    };
+
+    const hoverBgForContrastLight = effectiveBgForContrast(ctaHoverBgLight, baseLight);
+    const hoverBgForContrastDark = effectiveBgForContrast(ctaHoverBgDark, baseDark);
+    const ctaHoverTextLight = chooseForeground(hoverBgForContrastLight, textOnLight, textOnDark);
+    const ctaHoverTextDark = chooseForeground(hoverBgForContrastDark, textOnLight, textOnDark);
+
+    const semanticErrorBg = isDarkMode ? errorDark : errorLight;
+    const semanticNoticeBg = isDarkMode ? noticeDark : noticeLight;
+    const semanticSuccessBg = isDarkMode ? successDark : successLight;
+
+    const statusErrorText = chooseForeground(semanticErrorBg, textOnLight, textOnDark);
+    const statusNoticeText = chooseForeground(semanticNoticeBg, textOnLight, textOnDark);
+    const statusSuccessText = chooseForeground(semanticSuccessBg, textOnLight, textOnDark);
+
+    const headingLight = bestForegroundColor(baseLight, [primaryDarker, accentDarker, textOnLight, textOnDark]);
+    const headingDark = bestForegroundColor(baseDark, [primaryLight, accentLight, textOnDark, textOnLight]);
+
+    const listItemBgLight = remaining.length > 3 ? remaining[3] : primaryLight;
+    const listItemBgDark = remaining.length > 3 ? remaining[3] : primaryDark;
+    const listItemTextLight = chooseForeground(listItemBgLight, textOnLight, textOnDark);
+    const listItemTextDark = chooseForeground(listItemBgDark, textOnLight, textOnDark);
+
+    const listItemAltBgLight = remaining.length > 4 ? remaining[4] : secondaryLight;
+    const listItemAltBgDark = remaining.length > 4 ? remaining[4] : secondaryDark;
+    const listItemAltTextLight = chooseForeground(listItemAltBgLight, textOnLight, textOnDark);
+    const listItemAltTextDark = chooseForeground(listItemAltBgDark, textOnLight, textOnDark);
+
+    const menuAltBgLight = remaining.length > 5 ? remaining[5] : tertiaryLight;
+    const menuAltBgDark = remaining.length > 5 ? remaining[5] : tertiaryDark;
+    const menuAltTextLight = chooseForeground(menuAltBgLight, textOnLight, textOnDark);
+    const menuAltTextDark = chooseForeground(menuAltBgDark, textOnLight, textOnDark);
+
+    const placeholderCount = [
+      baseLight, baseDark, textOnLight, textOnDark,
+      primaryLight, primaryDark, primaryLighter, primaryDarker,
+      secondaryLight, secondaryDark, secondaryLighter, secondaryDarker,
+      tertiaryLight, tertiaryDark, tertiaryLighter, tertiaryDarker,
+      accentLight, accentDark, accentLighter, accentDarker,
+      errorLight, errorDark, noticeLight, noticeDark, successLight, successDark
+    ].filter(c => c === PLACEHOLDER_COLOR).length;
+
+    return {
+      baseLight, baseDark, textOnLight, textOnDark,
+      primaryLight, primaryDark, primaryLighter, primaryDarker,
+      secondaryLight, secondaryDark, secondaryLighter, secondaryDarker,
+      tertiaryLight, tertiaryDark, tertiaryLighter, tertiaryDarker,
+      accentLight, accentDark, accentLighter, accentDarker,
+      errorLight, errorDark, noticeLight, noticeDark, successLight, successDark,
+      ctaBgLight, ctaBgDark, ctaTextLight, ctaTextDark,
+      hoverBgForContrastLight, hoverBgForContrastDark, ctaHoverTextLight, ctaHoverTextDark,
+      headingLight, headingDark,
+      listItemBgLight, listItemBgDark, listItemTextLight, listItemTextDark,
+      listItemAltBgLight, listItemAltBgDark, listItemAltTextLight, listItemAltTextDark,
+      menuAltBgLight, menuAltBgDark, menuAltTextLight, menuAltTextDark,
+      paletteColors, placeholderCount, chooseForeground
+    };
   }
 
   function showPreviewModal(startIndex) {
@@ -717,712 +1421,109 @@ function wpwmThemeVariationDisplay() {
     // Update preview content
     function updatePreview() {
       const v = allVariations[currentIndex];
-      const palette = getConfigPath(v.config, ['settings', 'color', 'palette'], []);
-      const cssString = getConfigPath(v.config, ['styles', 'css'], '');
-
-      const PLACEHOLDER_COLOR = '#10b981';
 
       titleEl.textContent = v.title || v.slug;
       counter.textContent = `${currentIndex + 1} / ${allVariations.length}`;
 
-      // Parse CSS variables from the styles.css string
-      const cssVars = {};
-      if (cssString) {
-        // Match CSS variable definitions like: --primary-light: #7ad1ff;
-        const varMatches = cssString.matchAll(/--([a-z0-9-]+)\s*:\s*([^;]+);/gi);
-        for (const match of varMatches) {
-          const varName = match[1];
-          let varValue = match[2].trim();
-          // Resolve nested var() references
-          if (varValue.startsWith('var(')) {
-            const nestedVar = varValue.match(/var\(--([a-z0-9-]+)\)/i);
-            if (nestedVar && cssVars[nestedVar[1]]) {
-              varValue = cssVars[nestedVar[1]];
-            }
-          }
-          cssVars[varName] = varValue;
-        }
-      }
-
-      function resolveStyleColorValue(colorValue) {
-        if (!colorValue) return null;
-        let c = (colorValue || '').toString().trim();
-        if (!c) return null;
-
-        // WP theme.json may use preset tokens like: var:preset|color|contrast
-        // Convert them into valid CSS var() references.
-        if (c.includes('var:preset|color|')) {
-          c = c.replace(/var:preset\|color\|([a-z0-9-]+)/gi, 'var(--wp--preset--color--$1)');
-        }
-
-        // Prefer resolving WP preset vars to the actual variation palette values.
-        // This makes the preview independent of whether :root defines the preset var.
-        // Example: var(--wp--preset--color--contrast) -> "#1b1b1b" (from settings.color.palette).
-        const resolveWpPresetColorFromPalette = (varName) => {
-          const prefix = 'wp--preset--color--';
-          if (!varName || !varName.startsWith(prefix)) return null;
-          const slug = varName.slice(prefix.length);
-          if (!slug) return null;
-
-          const entry = Array.isArray(palette)
-            ? palette.find(e => e && typeof e === 'object' && (e.slug || e.name) === slug)
-            : null;
-          if (!entry) return null;
-
-          let val = entry.color;
-          if (typeof val !== 'string') return null;
-          val = val.trim();
-          if (!val) return null;
-
-          // Resolve var(--x) through styles.css parsed vars if available.
-          if (val.startsWith('var(')) {
-            const m = val.match(/var\(--([a-z0-9-]+)\)/i);
-            if (m && cssVars[m[1]]) {
-              const resolved = (cssVars[m[1]] || '').trim();
-              if (resolved && !resolved.startsWith('var(')) return resolved;
-            }
-          }
-
-          // If it's a WP token, normalize it; otherwise return as-is.
-          if (val.includes('var:preset|color|')) {
-            val = val.replace(/var:preset\|color\|([a-z0-9-]+)/gi, 'var(--wp--preset--color--$1)');
-          }
-
-          return val;
-        };
-
-        // Replace any occurrence(s) of WP preset vars in complex expressions.
-        // This covers cases like: color-mix(in srgb, var(--wp--preset--color--contrast) 85%, transparent)
-        if (c.includes('var(--wp--preset--color--')) {
-          c = c.replace(/var\(--(wp--preset--color--[a-z0-9-]+)\)/gi, (full, varName) => {
-            const fromPalette = resolveWpPresetColorFromPalette(varName);
-            if (fromPalette && !fromPalette.startsWith('var(')) return fromPalette;
-            return full;
-          });
-        }
-
-        // Resolve var(--x) using parsed CSS vars when possible
-        if (c.startsWith('var(')) {
-          const varMatch = c.match(/var\(--([a-z0-9-]+)\)/i);
-          if (varMatch && cssVars[varMatch[1]]) {
-            const resolved = (cssVars[varMatch[1]] || '').trim();
-            if (resolved && !resolved.startsWith('var(')) return resolved;
-          }
-
-          // If it's a WP preset var, try resolving from the variation palette.
-          if (varMatch && varMatch[1] && varMatch[1].startsWith('wp--preset--color--')) {
-            const fromPalette = resolveWpPresetColorFromPalette(varMatch[1]);
-            if (fromPalette && !fromPalette.startsWith('var(')) return fromPalette;
-          }
-
-          // Try resolving WP preset vars from :root (common in default theme variations)
-          if (varMatch && varMatch[1] && varMatch[1].startsWith('wp--preset--')) {
-            try {
-              const rootVal = getComputedStyle(document.documentElement)
-                .getPropertyValue(`--${varMatch[1]}`)
-                .trim();
-              if (rootVal && !rootVal.startsWith('var(')) return rootVal;
-            } catch (e) {/* noop */ }
-          }
-
-          // Keep the var() reference for CSS assignment even if we can't resolve it.
-          return c;
-        }
-
-        // Accept common CSS colors we can measure
-        if (c.startsWith('#') || c.startsWith('rgb(') || c.startsWith('rgba(') || c.startsWith('oklch(') || c.startsWith('color(')) {
-          return c;
-        }
-
-        return c;
-      }
-
-      // Get button colors from theme.json styles when available
-      const buttonBgFromStyles = resolveStyleColorValue(getConfigPath(v.config, ['styles', 'elements', 'button', 'color', 'background']));
-      const buttonTextFromStyles = resolveStyleColorValue(getConfigPath(v.config, ['styles', 'elements', 'button', 'color', 'text']));
-
-      const buttonHoverBgFromStyles =
-        resolveStyleColorValue(getConfigPath(v.config, ['styles', 'elements', 'button', ':hover', 'color', 'background'])) ||
-        resolveStyleColorValue(getConfigPath(v.config, ['styles', 'elements', 'button', 'hover', 'color', 'background']));
-      const buttonHoverTextFromStyles =
-        resolveStyleColorValue(getConfigPath(v.config, ['styles', 'elements', 'button', ':hover', 'color', 'text'])) ||
-        resolveStyleColorValue(getConfigPath(v.config, ['styles', 'elements', 'button', 'hover', 'color', 'text']));
-
-      // Get color values from palette - resolve var() references to actual colors
-      const getColor = (...slugPatterns) => {
-        for (const pattern of slugPatterns) {
-          const paletteEntry = palette.find(c => c.slug && c.slug.includes(pattern));
-          if (paletteEntry) {
-            let color = paletteEntry.color;
-            // If color is a CSS variable, resolve it
-            if (color && color.startsWith('var(')) {
-              const varMatch = color.match(/var\(--([a-z0-9-]+)\)/i);
-              if (varMatch && cssVars[varMatch[1]]) {
-                color = cssVars[varMatch[1]];
-              }
-            }
-            // Return if we have a real color value (not another var)
-            if (color && !color.startsWith('var(')) {
-              return color;
-            }
-          }
-        }
-        return null;
-      };
-
-      function normalizePaletteEntries(paletteEntries) {
-        if (!Array.isArray(paletteEntries)) return [];
-        const out = [];
-        // Use a neutral mid-gray background for compositing colors with alpha
-        const neutralBg = [128, 128, 128];
-
-        for (const entry of paletteEntries) {
-          if (!entry || typeof entry !== 'object') continue;
-          const slug = (entry.slug || entry.name || '').toString();
-          const rawColor = entry.color;
-          let resolved = rawColor;
-          if (resolved && typeof resolved === 'string' && resolved.trim().startsWith('var(')) {
-            const varMatch = resolved.match(/var\(--([a-z0-9-]+)\)/i);
-            if (varMatch && cssVars[varMatch[1]]) {
-              resolved = cssVars[varMatch[1]];
-            }
-          }
-          resolved = resolveStyleColorValue(resolved);
-
-          // Composite colors with alpha over neutral background to ensure all palette colors are opaque
-          if (resolved && typeof resolved === 'string') {
-            const rgba = parseColorToRgba(resolved);
-            if (rgba && rgba[3] < 1) {
-              // Has alpha channel - composite it
-              const composited = compositeRGBAoverRGB(rgba, neutralBg);
-              resolved = `rgb(${composited[0]}, ${composited[1]}, ${composited[2]})`;
-            }
-          }
-
-          out.push({ slug, raw: rawColor, color: resolved });
-        }
-        return out;
-      }
-
-      const normalizedPalette = normalizePaletteEntries(palette);
-      const paletteColors = normalizedPalette
-        .map(e => e.color)
-        .filter(Boolean);
-
-      // Derive base colors from palette by luminance (prefer opaque colors)
-      const opaqueCandidates = paletteColors.filter(c => isOpaqueColor(c));
-      const baseCandidates = opaqueCandidates.length ? opaqueCandidates : paletteColors;
-
-      function byLuminanceAsc(a, b) {
-        const La = rgbToLuminance(colorStringToRgb(a));
-        const Lb = rgbToLuminance(colorStringToRgb(b));
-        return La - Lb;
-      }
-
-      const sortedByLum = baseCandidates.slice().sort(byLuminanceAsc);
-      const derivedBaseLight = sortedByLum.length ? sortedByLum[sortedByLum.length - 1] : PLACEHOLDER_COLOR;
-      const derivedBaseDark = sortedByLum.length ? sortedByLum[0] : PLACEHOLDER_COLOR;
-
-      // Derive text colors based on page backgrounds
-      const derivedTextOnLight = (() => {
-        const candidates = paletteColors.length ? paletteColors : [DEFAULT_LIGHT_TEXT, DEFAULT_DARK_TEXT];
-        let best = candidates[0];
-        let bestC = 0;
-        const bgRgb = colorStringToRgb(derivedBaseLight);
-        for (const c of candidates) {
-          const fgRgb = compositeColorStringOverBg(c, bgRgb);
-          const cr = contrastRatioRGB(bgRgb, fgRgb);
-          if (cr > bestC) {
-            bestC = cr;
-            best = c;
-          }
-        }
-        return best || DEFAULT_LIGHT_TEXT;
-      })();
-
-      const derivedTextOnDark = (() => {
-        const candidates = paletteColors.length ? paletteColors : [DEFAULT_LIGHT_TEXT, DEFAULT_DARK_TEXT];
-        let best = candidates[0];
-        let bestC = 0;
-        const bgRgb = colorStringToRgb(derivedBaseDark);
-        for (const c of candidates) {
-          const fgRgb = compositeColorStringOverBg(c, bgRgb);
-          const cr = contrastRatioRGB(bgRgb, fgRgb);
-          if (cr > bestC) {
-            bestC = cr;
-            best = c;
-          }
-        }
-        return best || DEFAULT_DARK_TEXT;
-      })();
-
-      function bestForegroundColor(bgColor, candidates) {
-        const bgRgb = colorStringToRgb(bgColor);
-        let best = (candidates && candidates.length) ? candidates[0] : (DEFAULT_LIGHT_TEXT);
-        let bestC = 0;
-        for (const c of (candidates || [])) {
-          if (!c) continue;
-          const fgRgb = compositeColorStringOverBg(c, bgRgb);
-          const cr = contrastRatioRGB(bgRgb, fgRgb);
-          if (cr > bestC) {
-            bestC = cr;
-            best = c;
-          }
-        }
-        return best;
-      }
-
-      // Sequentially assign remaining colors to preview roles
-      const used = new Set([derivedBaseLight, derivedBaseDark, derivedTextOnLight, derivedTextOnDark]);
-      const remaining = paletteColors.filter(c => !used.has(c));
-      const assigned = []; // Track colors as they're assigned for reuse
-      let remIdx = 0;
-      let cycleIdx = 0;
-      const nextColor = () => {
-        // First, use remaining unused colors
-        if (remIdx < remaining.length) {
-          const color = remaining[remIdx++];
-          assigned.push(color);
-          return color;
-        }
-        // When remaining is empty, cycle through already-assigned colors
-        if (assigned.length > 0) {
-          const color = assigned[cycleIdx % assigned.length];
-          cycleIdx++;
-          return color;
-        }
-        // Only use placeholder if we have no colors at all
-        return PLACEHOLDER_COLOR;
-      };
-
-      // Initialize all preview role colors to placeholder
-      const previewColors = {
-        baseLight: derivedBaseLight,
-        baseDark: derivedBaseDark,
-        textOnLight: derivedTextOnLight,
-        textOnDark: derivedTextOnDark,
-
-        primaryLight: PLACEHOLDER_COLOR,
-        primaryDark: PLACEHOLDER_COLOR,
-        primaryLighter: PLACEHOLDER_COLOR,
-        primaryDarker: PLACEHOLDER_COLOR,
-
-        secondaryLight: PLACEHOLDER_COLOR,
-        secondaryDark: PLACEHOLDER_COLOR,
-        secondaryLighter: PLACEHOLDER_COLOR,
-        secondaryDarker: PLACEHOLDER_COLOR,
-
-        tertiaryLight: PLACEHOLDER_COLOR,
-        tertiaryDark: PLACEHOLDER_COLOR,
-        tertiaryLighter: PLACEHOLDER_COLOR,
-        tertiaryDarker: PLACEHOLDER_COLOR,
-
-        accentLight: PLACEHOLDER_COLOR,
-        accentDark: PLACEHOLDER_COLOR,
-        accentLighter: PLACEHOLDER_COLOR,
-        accentDarker: PLACEHOLDER_COLOR,
-
-        errorLight: PLACEHOLDER_COLOR,
-        errorDark: PLACEHOLDER_COLOR,
-        noticeLight: PLACEHOLDER_COLOR,
-        noticeDark: PLACEHOLDER_COLOR,
-        successLight: PLACEHOLDER_COLOR,
-        successDark: PLACEHOLDER_COLOR,
-      };
-
-      // Prefer semantic slugs if present, otherwise fill sequentially
-      const baseLightExplicit = getColor('base-light', 'background-light', 'background');
-      const baseDarkExplicit = getColor('base-dark', 'background-dark');
-      const baseSingle = getColor('base', 'basecolor');
-      const contrastSingle = getColor('contrast', 'contrastcolor');
-      const contrast2 = getColor('contrast-2');
-      const contrast3 = getColor('contrast-3');
-
-      let baseLight = baseLightExplicit || previewColors.baseLight;
-      let baseDark = baseDarkExplicit || previewColors.baseDark;
-
-      // Common WP default themes: base + contrast. base is usually light but not guaranteed.
-      if (!baseLightExplicit && !baseDarkExplicit && baseSingle) {
-        const L = rgbToLuminance(colorStringToRgb(baseSingle));
-        if (L >= 0.5) {
-          baseLight = baseSingle;
-        } else {
-          baseDark = baseSingle;
-        }
-      }
-
-      let textOnLight = getColor('text-on-light', 'contrast-light', 'foreground-light', 'foreground') || previewColors.textOnLight;
-      let textOnDark = getColor('text-on-dark', 'contrast-dark', 'foreground-dark') || previewColors.textOnDark;
-
-      // If we have base/contrast, treat contrast as the intended text color on base.
-      if (contrastSingle) {
-        if (baseSingle && baseLight === baseSingle) textOnLight = contrastSingle;
-        if (baseSingle && baseDark === baseSingle) textOnDark = contrastSingle;
-      } else {
-        // Use numbered contrast entries if needed (common in WP default variations)
-        if (baseSingle && baseLight === baseSingle) {
-          textOnLight = contrast2 || contrast3 || textOnLight;
-        }
-        if (baseSingle && baseDark === baseSingle) {
-          textOnDark = contrast2 || contrast3 || textOnDark;
-        }
-      }
-
-      // Fill accents first
-      // 1) If a slug matches accent*, use that.
-      // 2) Otherwise, if theme.json defines button background, treat that as accent.
-      const accentSeed =
-        getColor('accent-darker', 'accent-dark', 'accent-light', 'accent-lighter', 'accent', 'accent-1', 'accent-2', 'accent-3', 'accent-4', 'accent-5') ||
-        buttonBgFromStyles ||
-        nextColor();
-      previewColors.accentLight = accentSeed;
-      previewColors.accentDark = accentSeed;
-      previewColors.accentLighter = accentSeed;
-      previewColors.accentDarker = accentSeed;
-
-      // Primary/secondary/tertiary next
-      const primarySeed = getColor('primary') || nextColor();
-      previewColors.primaryLight = primarySeed;
-      previewColors.primaryDark = primarySeed;
-      previewColors.primaryLighter = primarySeed;
-      previewColors.primaryDarker = primarySeed;
-
-      const secondarySeed = getColor('secondary') || nextColor();
-      previewColors.secondaryLight = secondarySeed;
-      previewColors.secondaryDark = secondarySeed;
-      previewColors.secondaryLighter = secondarySeed;
-      previewColors.secondaryDarker = secondarySeed;
-
-      const tertiarySeed = getColor('tertiary') || nextColor();
-      previewColors.tertiaryLight = tertiarySeed;
-      previewColors.tertiaryDark = tertiarySeed;
-      previewColors.tertiaryLighter = tertiarySeed;
-      previewColors.tertiaryDarker = tertiarySeed;
-
-      // Status colors last
-      const errorSeed = getColor('error') || nextColor();
-      previewColors.errorLight = errorSeed;
-      previewColors.errorDark = errorSeed;
-      const noticeSeed = getColor('warning', 'notice') || nextColor();
-      previewColors.noticeLight = noticeSeed;
-      previewColors.noticeDark = noticeSeed;
-      const successSeed = getColor('success') || nextColor();
-      previewColors.successLight = successSeed;
-      previewColors.successDark = successSeed;
-
-      const chooseForeground = (bgColor, textOnLight, textOnDark) => {
-        let bgRgb;
-        try {
-          bgRgb = colorStringToRgb(bgColor);
-        } catch (e) {
-          return textOnLight;
-        }
-        const tolRgb = compositeColorStringOverBg(textOnLight, bgRgb);
-        const todRgb = compositeColorStringOverBg(textOnDark, bgRgb);
-        const cLight = contrastRatioRGB(bgRgb, tolRgb);
-        const cDark = contrastRatioRGB(bgRgb, todRgb);
-        return cLight >= cDark ? textOnLight : textOnDark;
-      };
-
-      const pickColor = (...vals) => {
-        for (const v of vals) {
-          if (typeof v !== 'string') continue;
-          const s = v.trim();
-          if (!s) continue;
-          if (s === 'undefined' || s === 'null') continue;
-          return s;
-        }
-        return PLACEHOLDER_COLOR;
-      };
-
-
-      const bgColor = isDarkMode ? baseDark : baseLight;
-
-      const primaryLight = getColor('primary-light') || previewColors.primaryLight;
-      const primaryDark = getColor('primary-dark') || previewColors.primaryDark;
-      const primaryLighter = getColor('primary-lighter') || previewColors.primaryLighter;
-      const primaryDarker = getColor('primary-darker') || previewColors.primaryDarker;
-
-      const secondaryLight = getColor('secondary-light') || previewColors.secondaryLight;
-      const secondaryDark = getColor('secondary-dark') || previewColors.secondaryDark;
-      const secondaryLighter = getColor('secondary-lighter') || previewColors.secondaryLighter;
-      const secondaryDarker = getColor('secondary-darker') || previewColors.secondaryDarker;
-
-      const tertiaryLight = getColor('tertiary-light') || previewColors.tertiaryLight;
-      const tertiaryDark = getColor('tertiary-dark') || previewColors.tertiaryDark;
-      const tertiaryLighter = getColor('tertiary-lighter') || previewColors.tertiaryLighter;
-      const tertiaryDarker = getColor('tertiary-darker') || previewColors.tertiaryDarker;
-
-      const accentLight = pickColor(getColor('accent-light'), previewColors.accentLight);
-      const accentDark = pickColor(getColor('accent-dark'), previewColors.accentDark);
-      const accentLighter = pickColor(getColor('accent-lighter'), previewColors.accentLighter);
-      const accentDarker = pickColor(getColor('accent-darker'), previewColors.accentDarker);
-
-      // Build a reusable color pool from palette (excluding page bg/text and placeholders)
-      // This allows semantic colors to reuse palette colors instead of falling back to PLACEHOLDER_COLOR
-      const normalizeColorForComparison = (color) => {
-        if (!color || typeof color !== 'string') return '';
-        // Normalize hex colors to lowercase without spaces
-        return color.toLowerCase().trim().replace(/\s+/g, '');
-      };
-
-      const baseNorm = normalizeColorForComparison(baseLight);
-      const darkNorm = normalizeColorForComparison(baseDark);
-      const textLightNorm = normalizeColorForComparison(textOnLight);
-      const textDarkNorm = normalizeColorForComparison(textOnDark);
-      const placeholderNorm = normalizeColorForComparison(PLACEHOLDER_COLOR);
-
-      const reusableColors = paletteColors.filter(c => {
-        if (!c || typeof c !== 'string') return false;
-        const normalized = normalizeColorForComparison(c);
-        // Exclude only exact matches of page backgrounds and text colors
-        if (normalized === baseNorm || normalized === darkNorm) return false;
-        if (normalized === textLightNorm || normalized === textDarkNorm) return false;
-        // Exclude placeholder color
-        if (normalized === placeholderNorm) return false;
-        return true;
-      });
-
-      // Helper to pick from palette pool with fallback
-      const pickFromPalette = (preferredColor, fallbackIndex = 0) => {
-        if (preferredColor && preferredColor !== PLACEHOLDER_COLOR) return preferredColor;
-        return reusableColors[fallbackIndex % Math.max(1, reusableColors.length)] || PLACEHOLDER_COLOR;
-      };
-
-      // For minimal palettes, reuse colors from the palette instead of falling back to placeholder
-      // All colors are already opaque from normalizePaletteEntries
-      const errorLight = getColor('error-light') || pickFromPalette(previewColors.errorLight, 0);
-      const errorDark = getColor('error-dark') || pickFromPalette(previewColors.errorDark, 0);
-      const noticeLight = getColor('warning-light', 'notice-light') || pickFromPalette(previewColors.noticeLight, 1);
-      const noticeDark = getColor('warning-dark', 'notice-dark') || pickFromPalette(previewColors.noticeDark, 1);
-      const successLight = getColor('success-light') || pickFromPalette(previewColors.successLight, 2);
-      const successDark = getColor('success-dark') || pickFromPalette(previewColors.successDark, 2);
-
-      // Prefer theme.json button colors when available
-      // FUTURE ENHANCEMENT: For gradient backgrounds, extract the first color from the gradient
-      // and use that for contrast calculation instead of falling back to placeholder.
-      const ctaBgLight = pickColor(buttonBgFromStyles, accentDarker, primaryDarker, primaryDark, PLACEHOLDER_COLOR);
-      const ctaBgDark = pickColor(buttonBgFromStyles, accentLight, primaryLight, primaryLighter, PLACEHOLDER_COLOR);
-
-      // If CTA background is transparent, calculate text against the underlying page background
-      const ctaBgLightForContrast = (ctaBgLight && ctaBgLight.toLowerCase().trim() === 'transparent') ? baseLight : ctaBgLight;
-      const ctaBgDarkForContrast = (ctaBgDark && ctaBgDark.toLowerCase().trim() === 'transparent') ? baseDark : ctaBgDark;
-
-      const ctaTextLight = chooseForeground(ctaBgLightForContrast, textOnLight, textOnDark);
-      const ctaTextDark = chooseForeground(ctaBgDarkForContrast, textOnLight, textOnDark);
-
-      const ctaHoverBgLight = pickColor(buttonHoverBgFromStyles, accentDark, ctaBgLight, PLACEHOLDER_COLOR);
-      const ctaHoverBgDark = pickColor(buttonHoverBgFromStyles, accentLighter, ctaBgDark, PLACEHOLDER_COLOR);
-
-      const effectiveBgForContrast = (bgString, underlyingBgString) => {
-        if (typeof bgString !== 'string' || typeof underlyingBgString !== 'string') return bgString;
-        // Normalize whitespace including newlines to single spaces
-        const s = bgString.replace(/\s+/g, ' ').trim();
-        if (!s) return bgString;
-
-        // Helper to composite RGBA over RGB background
-        const compositeRgbOverBg = (fgRgba, bgRgb) => {
-          const [r, g, b, a = 1] = [fgRgba.r, fgRgba.g, fgRgba.b, fgRgba.a];
-          const [br, bg, bb] = bgRgb;
-          const outR = Math.round(r * a + br * (1 - a));
-          const outG = Math.round(g * a + bg * (1 - a));
-          const outB = Math.round(b * a + bb * (1 - a));
-
-          // Validate output to prevent NaN propagation
-          if (isNaN(outR) || isNaN(outG) || isNaN(outB)) {
-            return { r: br, g: bg, b: bb }; // Fall back to background color
-          }
-
-          return { r: outR, g: outG, b: outB };
-        };
-
-        // Handle: color-mix(in srgb, <colorA> P%, <colorB>)
-        // If colorB is transparent: composite colorA with alpha P% over underlying background
-        // Otherwise: mix colorA and colorB at the specified percentages
-        const m = s.match(/color-mix\(\s*in\s+srgb\s*,\s*([^,]+?)\s+(\d+(?:\.\d+)?)%\s*,\s*([^\)]+?)\s*\)/i);
-        if (m) {
-          const aRaw = (m[1] || '').trim();
-          const pct = Math.max(0, Math.min(100, parseFloat(m[2] || '0')));
-          const bRaw = (m[3] || '').trim();
-          const wa = pct / 100;
-          const wb = 1 - wa;
-
-          try {
-            const aRgb = colorStringToRgb(aRaw);
-
-            // Validate that we got a valid RGB array
-            if (!aRgb || !Array.isArray(aRgb) || aRgb.length < 3) {
-              return PLACEHOLDER_COLOR;
-            }
-
-            if (bRaw.toLowerCase() === 'transparent') {
-              const underRgb = colorStringToRgb(underlyingBgString);
-
-              // Validate underlying background RGB
-              if (!underRgb || !Array.isArray(underRgb) || underRgb.length < 3) {
-                return PLACEHOLDER_COLOR;
-              }
-
-              const composited = compositeRgbOverBg({ r: aRgb[0], g: aRgb[1], b: aRgb[2], a: wa }, underRgb);
-
-              // Validate that we got valid numbers; fall back to placeholder if computation failed
-              if (isNaN(composited.r) || isNaN(composited.g) || isNaN(composited.b)) {
-                return PLACEHOLDER_COLOR;
-              }
-
-              return `rgb(${composited.r} ${composited.g} ${composited.b})`;
-            }
-
-            const bRgb = colorStringToRgb(bRaw);
-
-            // Validate second color RGB
-            if (!bRgb || !Array.isArray(bRgb) || bRgb.length < 3) {
-              return PLACEHOLDER_COLOR;
-            }
-
-            const mixed = {
-              r: Math.round(aRgb[0] * wa + bRgb[0] * wb),
-              g: Math.round(aRgb[1] * wa + bRgb[1] * wb),
-              b: Math.round(aRgb[2] * wa + bRgb[2] * wb),
-            };
-
-            // Validate that we got valid numbers; fall back to placeholder if computation failed
-            if (isNaN(mixed.r) || isNaN(mixed.g) || isNaN(mixed.b)) {
-              return PLACEHOLDER_COLOR;
-            }
-
-            return `rgb(${mixed.r} ${mixed.g} ${mixed.b})`;
-          } catch (e) {
-            // If color parsing or computation fails, use placeholder color
-            return PLACEHOLDER_COLOR;
-          }
-        }
-
-        return bgString;
-      };
-
-      const hoverBgForContrastLight = effectiveBgForContrast(ctaHoverBgLight, baseLight);
-      const hoverBgForContrastDark = effectiveBgForContrast(ctaHoverBgDark, baseDark);
-      const ctaHoverTextLight = chooseForeground(hoverBgForContrastLight, textOnLight, textOnDark);
-      const ctaHoverTextDark = chooseForeground(hoverBgForContrastDark, textOnLight, textOnDark);
-
-      const semanticErrorBg = isDarkMode ? errorDark : errorLight;
-      const semanticNoticeBg = isDarkMode ? noticeDark : noticeLight;
-      const semanticSuccessBg = isDarkMode ? successDark : successLight;
-
-      const statusErrorText = chooseForeground(semanticErrorBg, textOnLight, textOnDark);
-      const statusNoticeText = chooseForeground(semanticNoticeBg, textOnLight, textOnDark);
-      const statusSuccessText = chooseForeground(semanticSuccessBg, textOnLight, textOnDark);
-
-      const headingLight = bestForegroundColor(baseLight, [primaryDarker, accentDarker, textOnLight, textOnDark]);
-      const headingDark = bestForegroundColor(baseDark, [primaryLight, accentLight, textOnDark, textOnLight]);
-
-      // For large palettes, assign additional colors for list items and menu variations
-      // Use remaining colors from palette if available, otherwise reuse existing colors
-      // All colors are already opaque from normalizePaletteEntries
-      const listItemBgLight = remaining.length > 3 ? remaining[3] : primaryLight;
-      const listItemBgDark = remaining.length > 3 ? remaining[3] : primaryDark;
-      const listItemTextLight = chooseForeground(listItemBgLight, textOnLight, textOnDark);
-      const listItemTextDark = chooseForeground(listItemBgDark, textOnLight, textOnDark);
-
-      const listItemAltBgLight = remaining.length > 4 ? remaining[4] : secondaryLight;
-      const listItemAltBgDark = remaining.length > 4 ? remaining[4] : secondaryDark;
-      const listItemAltTextLight = chooseForeground(listItemAltBgLight, textOnLight, textOnDark);
-      const listItemAltTextDark = chooseForeground(listItemAltBgDark, textOnLight, textOnDark);
-
-      // Third menu button uses tertiary or cycles through palette
-      const menuAltBgLight = remaining.length > 5 ? remaining[5] : tertiaryLight;
-      const menuAltBgDark = remaining.length > 5 ? remaining[5] : tertiaryDark;
-      const menuAltTextLight = chooseForeground(menuAltBgLight, textOnLight, textOnDark);
-      const menuAltTextDark = chooseForeground(menuAltBgDark, textOnLight, textOnDark);
-
-      const placeholderCount = [
+      // Resolve all colors using extracted function
+      const colors = resolvePreviewColors(v, isDarkMode);
+      const {
         baseLight, baseDark, textOnLight, textOnDark,
         primaryLight, primaryDark, primaryLighter, primaryDarker,
         secondaryLight, secondaryDark, secondaryLighter, secondaryDarker,
         tertiaryLight, tertiaryDark, tertiaryLighter, tertiaryDarker,
         accentLight, accentDark, accentLighter, accentDarker,
-        errorLight, errorDark, noticeLight, noticeDark, successLight, successDark
-      ].filter(c => c === PLACEHOLDER_COLOR).length;
+        errorLight, errorDark, noticeLight, noticeDark, successLight, successDark,
+        ctaBgLight, ctaBgDark, ctaTextLight, ctaTextDark,
+        hoverBgForContrastLight, hoverBgForContrastDark, ctaHoverTextLight, ctaHoverTextDark,
+        headingLight, headingDark,
+        listItemBgLight, listItemBgDark, listItemTextLight, listItemTextDark,
+        listItemAltBgLight, listItemAltBgDark, listItemAltTextLight, listItemAltTextDark,
+        menuAltBgLight, menuAltBgDark, menuAltTextLight, menuAltTextDark,
+        paletteColors, placeholderCount, chooseForeground
+      } = colors;
 
       const derivedNote = (!paletteColors.length)
         ? 'No palette colors found; using derived defaults.'
         : `This Theme Variation Viewer is designed for the <a href="https://gl-color-palette-generator.vercel.app/" target="_blank" rel="noopener">WPWM Color Palette Generator</a>. For other palettes, colors likely won't be displayed how the theme designer intended. (Found ${paletteColors.length} color(s)${placeholderCount > 0 ? `, ${placeholderCount} slot(s) filled with placeholder` : ''})`;
 
+      // Sanitize all color values before injection to prevent XSS
+      const s = sanitizeColorValue;
+
       previewContent.innerHTML = `
         <div class=\"wpwm-preview\" style=\"
           color-scheme: ${isDarkMode ? 'dark' : 'light'};
-          --base-light: ${baseLight};
-          --base-dark: ${baseDark};
-          --text-on-light: ${textOnLight};
-          --text-on-dark: ${textOnDark};
-          --primary-light: ${primaryLight};
-          --primary-dark: ${primaryDark};
-          --primary-lighter: ${primaryLighter};
-          --primary-darker: ${primaryDarker};
-          --primary-light-contrast: ${chooseForeground(primaryLight, textOnLight, textOnDark)};
-          --primary-dark-contrast: ${chooseForeground(primaryDark, textOnLight, textOnDark)};
-          --primary-lighter-contrast: ${chooseForeground(primaryLighter, textOnLight, textOnDark)};
-          --primary-darker-contrast: ${chooseForeground(primaryDarker, textOnLight, textOnDark)};
-          --secondary-light: ${secondaryLight};
-          --secondary-dark: ${secondaryDark};
-          --secondary-lighter: ${secondaryLighter};
-          --secondary-darker: ${secondaryDarker};
-          --secondary-light-contrast: ${chooseForeground(secondaryLight, textOnLight, textOnDark)};
-          --secondary-dark-contrast: ${chooseForeground(secondaryDark, textOnLight, textOnDark)};
-          --secondary-lighter-contrast: ${chooseForeground(secondaryLighter, textOnLight, textOnDark)};
-          --secondary-darker-contrast: ${chooseForeground(secondaryDarker, textOnLight, textOnDark)};
-          --tertiary-light: ${tertiaryLight};
-          --tertiary-dark: ${tertiaryDark};
-          --tertiary-lighter: ${tertiaryLighter};
-          --tertiary-darker: ${tertiaryDarker};
-          --tertiary-light-contrast: ${chooseForeground(tertiaryLight, textOnLight, textOnDark)};
-          --tertiary-dark-contrast: ${chooseForeground(tertiaryDark, textOnLight, textOnDark)};
-          --tertiary-lighter-contrast: ${chooseForeground(tertiaryLighter, textOnLight, textOnDark)};
-          --tertiary-darker-contrast: ${chooseForeground(tertiaryDarker, textOnLight, textOnDark)};
-          --accent-light: ${accentLight};
-          --accent-dark: ${accentDark};
-          --accent-lighter: ${accentLighter};
-          --accent-darker: ${accentDarker};
-          --accent-light-contrast: ${chooseForeground(accentLight, textOnLight, textOnDark)};
-          --accent-dark-contrast: ${chooseForeground(accentDark, textOnLight, textOnDark)};
-          --accent-lighter-contrast: ${chooseForeground(accentLighter, textOnLight, textOnDark)};
-          --accent-darker-contrast: ${chooseForeground(accentDarker, textOnLight, textOnDark)};
-          --error-light: ${errorLight};
-          --error-dark: ${errorDark};
-          --error-light-contrast: ${chooseForeground(errorLight, textOnLight, textOnDark)};
-          --error-dark-contrast: ${chooseForeground(errorDark, textOnLight, textOnDark)};
-          --notice-light: ${noticeLight};
-          --notice-dark: ${noticeDark};
-          --notice-light-contrast: ${chooseForeground(noticeLight, textOnLight, textOnDark)};
-          --notice-dark-contrast: ${chooseForeground(noticeDark, textOnLight, textOnDark)};
-          --success-light: ${successLight};
-          --success-dark: ${successDark};
-          --success-light-contrast: ${chooseForeground(successLight, textOnLight, textOnDark)};
+          --base-light: ${s(baseLight)};
+          --base-dark: ${s(baseDark)};
+          --text-on-light: ${s(textOnLight)};
+          --text-on-dark: ${s(textOnDark)};
+          --primary-light: ${s(primaryLight)};
+          --primary-dark: ${s(primaryDark)};
+          --primary-lighter: ${s(primaryLighter)};
+          --primary-darker: ${s(primaryDarker)};
+          --primary-light-contrast: ${s(chooseForeground(primaryLight, textOnLight, textOnDark))};
+          --primary-dark-contrast: ${s(chooseForeground(primaryDark, textOnLight, textOnDark))};
+          --primary-lighter-contrast: ${s(chooseForeground(primaryLighter, textOnLight, textOnDark))};
+          --primary-darker-contrast: ${s(chooseForeground(primaryDarker, textOnLight, textOnDark))};
+          --secondary-light: ${s(secondaryLight)};
+          --secondary-dark: ${s(secondaryDark)};
+          --secondary-lighter: ${s(secondaryLighter)};
+          --secondary-darker: ${s(secondaryDarker)};
+          --secondary-light-contrast: ${s(chooseForeground(secondaryLight, textOnLight, textOnDark))};
+          --secondary-dark-contrast: ${s(chooseForeground(secondaryDark, textOnLight, textOnDark))};
+          --secondary-lighter-contrast: ${s(chooseForeground(secondaryLighter, textOnLight, textOnDark))};
+          --secondary-darker-contrast: ${s(chooseForeground(secondaryDarker, textOnLight, textOnDark))};
+          --tertiary-light: ${s(tertiaryLight)};
+          --tertiary-dark: ${s(tertiaryDark)};
+          --tertiary-lighter: ${s(tertiaryLighter)};
+          --tertiary-darker: ${s(tertiaryDarker)};
+          --tertiary-light-contrast: ${s(chooseForeground(tertiaryLight, textOnLight, textOnDark))};
+          --tertiary-dark-contrast: ${s(chooseForeground(tertiaryDark, textOnLight, textOnDark))};
+          --tertiary-lighter-contrast: ${s(chooseForeground(tertiaryLighter, textOnLight, textOnDark))};
+          --tertiary-darker-contrast: ${s(chooseForeground(tertiaryDarker, textOnLight, textOnDark))};
+          --accent-light: ${s(accentLight)};
+          --accent-dark: ${s(accentDark)};
+          --accent-lighter: ${s(accentLighter)};
+          --accent-darker: ${s(accentDarker)};
+          --accent-light-contrast: ${s(chooseForeground(accentLight, textOnLight, textOnDark))};
+          --accent-dark-contrast: ${s(chooseForeground(accentDark, textOnLight, textOnDark))};
+          --accent-lighter-contrast: ${s(chooseForeground(accentLighter, textOnLight, textOnDark))};
+          --accent-darker-contrast: ${s(chooseForeground(accentDarker, textOnLight, textOnDark))};
+          --error-light: ${s(errorLight)};
+          --error-dark: ${s(errorDark)};
+          --error-light-contrast: ${s(chooseForeground(errorLight, textOnLight, textOnDark))};
+          --error-dark-contrast: ${s(chooseForeground(errorDark, textOnLight, textOnDark))};
+          --notice-light: ${s(noticeLight)};
+          --notice-dark: ${s(noticeDark)};
+          --notice-light-contrast: ${s(chooseForeground(noticeLight, textOnLight, textOnDark))};
+          --notice-dark-contrast: ${s(chooseForeground(noticeDark, textOnLight, textOnDark))};
+          --success-light: ${s(successLight)};
+          --success-dark: ${s(successDark)};
+          --success-light-contrast: ${s(chooseForeground(successLight, textOnLight, textOnDark))};
 
-          --success-dark-contrast: ${chooseForeground(successDark, textOnLight, textOnDark)};
-          --cta-bg-light: ${ctaBgLight};
-          --cta-bg-dark: ${ctaBgDark};
-          --cta-text-light: ${ctaTextLight};
-          --cta-text-dark: ${ctaTextDark};
-          --cta-hover-bg-light: ${hoverBgForContrastLight};
-          --cta-hover-bg-dark: ${hoverBgForContrastDark};
-          --cta-hover-text-light: ${ctaHoverTextLight};
-          --cta-hover-text-dark: ${ctaHoverTextDark};
-          --heading-light: ${headingLight};
-          --heading-dark: ${headingDark};
-          --list-item-bg-light: ${listItemBgLight};
-          --list-item-bg-dark: ${listItemBgDark};
-          --list-item-text-light: ${listItemTextLight};
-          --list-item-text-dark: ${listItemTextDark};
-          --list-item-alt-bg-light: ${listItemAltBgLight};
-          --list-item-alt-bg-dark: ${listItemAltBgDark};
-          --list-item-alt-text-light: ${listItemAltTextLight};
-          --list-item-alt-text-dark: ${listItemAltTextDark};
-          --menu-alt-bg-light: ${menuAltBgLight};
-          --menu-alt-bg-dark: ${menuAltBgDark};
-          --menu-alt-text-light: ${menuAltTextLight};
-          --menu-alt-text-dark: ${menuAltTextDark};
+          --success-dark-contrast: ${s(chooseForeground(successDark, textOnLight, textOnDark))};
+          --cta-bg-light: ${s(ctaBgLight)};
+          --cta-bg-dark: ${s(ctaBgDark)};
+          --cta-text-light: ${s(ctaTextLight)};
+          --cta-text-dark: ${s(ctaTextDark)};
+          --cta-hover-bg-light: ${s(hoverBgForContrastLight)};
+          --cta-hover-bg-dark: ${s(hoverBgForContrastDark)};
+          --cta-hover-text-light: ${s(ctaHoverTextLight)};
+          --cta-hover-text-dark: ${s(ctaHoverTextDark)};
+          --heading-light: ${s(headingLight)};
+          --heading-dark: ${s(headingDark)};
+          --list-item-bg-light: ${s(listItemBgLight)};
+          --list-item-bg-dark: ${s(listItemBgDark)};
+          --list-item-text-light: ${s(listItemTextLight)};
+          --list-item-text-dark: ${s(listItemTextDark)};
+          --list-item-alt-bg-light: ${s(listItemAltBgLight)};
+          --list-item-alt-bg-dark: ${s(listItemAltBgDark)};
+          --list-item-alt-text-light: ${s(listItemAltTextLight)};
+          --list-item-alt-text-dark: ${s(listItemAltTextDark)};
+          --menu-alt-bg-light: ${s(menuAltBgLight)};
+          --menu-alt-bg-dark: ${s(menuAltBgDark)};
+          --menu-alt-text-light: ${s(menuAltTextLight)};
+          --menu-alt-text-dark: ${s(menuAltTextDark)};
         ">
           ${derivedNote ? `<div class="wpwm-preview-note">${derivedNote}</div>` : ''}
           <div class="wpwm-preview-card">
