@@ -23,6 +23,7 @@ function wpwmThemeVariationDisplay() {
 
   // Plugin REST API endpoints (relative to wp-json/)
   const API_NAMESPACE = 'wpwm-tvd/v1';
+  const API_ENDPOINT_BRANDING = 'branding';
   const API_ENDPOINT_VARIATIONS = 'variations';
   const API_ENDPOINT_CURRENT = 'current';
   const API_ENDPOINT_APPLY = 'apply';
@@ -132,6 +133,7 @@ function wpwmThemeVariationDisplay() {
   // Global state
   let allVariations = [];
   let currentVariationSlug = null;
+  let agencyBranding = null;
 
   // ============================================================================
   // HELPER FUNCTIONS
@@ -414,6 +416,18 @@ function wpwmThemeVariationDisplay() {
     }
   }
 
+  async function fetchBranding() {
+    try {
+      const path = buildApiPath(API_ENDPOINT_BRANDING);
+      const res = await window.wp.apiFetch({ path });
+      if (!res || typeof res !== 'object') return null;
+      return res;
+    } catch (e) {
+      logError('fetch branding error', e, 'warn');
+      return null;
+    }
+  }
+
   async function getCurrentVariation() {
     try {
       // Try Site Editor API first (only available in Site Editor context)
@@ -452,10 +466,52 @@ function wpwmThemeVariationDisplay() {
     return null;
   }
 
+  function renderBrandingHeaderEl() {
+    const cfg = agencyBranding || {};
+    const companyName = (cfg.companyName || '').toString().trim();
+    const companyContact = (cfg.companyContact || '').toString().trim();
+    const clientName = (cfg.clientName || '').toString().trim();
+    const companyLogoUrl = (cfg.companyLogoUrl || '').toString().trim();
+
+    const wrap = el('div', 'wpwm-tvd-branding');
+
+    if (companyLogoUrl) {
+      const img = document.createElement('img');
+      img.className = 'wpwm-tvd-branding-logo';
+      img.alt = companyName || 'Company logo';
+      img.src = companyLogoUrl;
+      wrap.appendChild(img);
+    }
+
+    const text = el('div', 'wpwm-tvd-branding-text');
+    const title = el('div', 'wpwm-tvd-branding-title', companyName || 'WPWM Theme Variation Display');
+    text.appendChild(title);
+
+    if (clientName) {
+      text.appendChild(el('div', 'wpwm-tvd-branding-client', clientName));
+    }
+
+    if (companyContact) {
+      const link = document.createElement('a');
+      link.className = 'wpwm-tvd-branding-contact';
+      link.textContent = companyContact;
+      link.href = companyContact;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      text.appendChild(link);
+    }
+
+    wrap.appendChild(text);
+    return wrap;
+  }
+
   function createPanelStructure() {
     const panel = el('div', '', '');
     panel.id = DOM_ID_PANEL;
     const header = el('div', CSS_CLASS_HEADER);
+
+    header.appendChild(renderBrandingHeaderEl());
+
     if (UI_TEXT.noteText) {
       const note = el('div', CSS_CLASS_NOTE, UI_TEXT.noteText);
       header.appendChild(note);
@@ -821,7 +877,7 @@ function wpwmThemeVariationDisplay() {
     }
 
     // Get button colors from theme.json styles when available
-    // const buttonBgFromStyles = resolveStyleColorValue(getConfigPath(variation.config, ['styles', 'elements', 'button', 'color', 'background']));
+    const buttonBgFromStyles = resolveStyleColorValue(getConfigPath(variation.config, ['styles', 'elements', 'button', 'color', 'background']));
     const buttonTextFromStyles = resolveStyleColorValue(getConfigPath(variation.config, ['styles', 'elements', 'button', 'color', 'text']));
 
     const buttonHoverBgFromStyles =
@@ -1357,6 +1413,7 @@ function wpwmThemeVariationDisplay() {
 
     // Modal header with title and controls
     const header = el('div', CSS_CLASS_MODAL_HEADER);
+    header.appendChild(renderBrandingHeaderEl());
     const titleEl = el('h2', CSS_CLASS_MODAL_TITLE);
     const controls = el('div', CSS_CLASS_MODAL_CONTROLS);
 
@@ -1890,6 +1947,7 @@ function wpwmThemeVariationDisplay() {
   // Mount in Site Editor when styles screen is ready
   if (window.wp && window.wp.data) {
     whenStylesScreenReady(async (host) => {
+      agencyBranding = await fetchBranding();
       const grid = mountPanel(host);
       allVariations = await fetchVariations();
       currentVariationSlug = await getCurrentVariation();
@@ -1914,6 +1972,7 @@ function wpwmThemeVariationDisplay() {
     }
 
     (async () => {
+      agencyBranding = await fetchBranding();
       console.log('WPWM-TVD: Fetching variations...');
       const grid = mountPanelInContainer(root);
       allVariations = await fetchVariations();
