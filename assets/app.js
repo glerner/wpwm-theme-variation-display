@@ -405,6 +405,15 @@ function wpwmThemeVariationDisplay() {
     return relBase.replace(/\/?$/, '') + '/' + endpoint;
   }
 
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   async function fetchVariations() {
     try {
       const path = buildApiPath(API_ENDPOINT_VARIATIONS);
@@ -475,33 +484,53 @@ function wpwmThemeVariationDisplay() {
 
     const wrap = el('div', 'wpwm-tvd-branding');
 
+    const topRow = el('div', 'wpwm-tvd-branding-top');
+
     if (companyLogoUrl) {
       const img = document.createElement('img');
       img.className = 'wpwm-tvd-branding-logo';
       img.alt = companyName || 'Company logo';
       img.src = companyLogoUrl;
-      wrap.appendChild(img);
+      topRow.appendChild(img);
     }
 
     const text = el('div', 'wpwm-tvd-branding-text');
-    const title = el('div', 'wpwm-tvd-branding-title', companyName || 'WPWM Theme Variation Display');
+    const title = el('div', 'wpwm-tvd-branding-title', `${companyName || 'WPWM'} - Theme Variation Display`);
     text.appendChild(title);
 
-    if (clientName) {
-      text.appendChild(el('div', 'wpwm-tvd-branding-client', clientName));
-    }
-
     if (companyContact) {
+      const contactRow = el('div', 'wpwm-tvd-branding-contact-row');
+      const prefix = document.createElement('span');
+      prefix.textContent = 'Contact ';
+      contactRow.appendChild(prefix);
+
       const link = document.createElement('a');
       link.className = 'wpwm-tvd-branding-contact';
       link.textContent = companyContact;
-      link.href = companyContact;
-      link.target = '_blank';
-      link.rel = 'noopener';
-      text.appendChild(link);
+      const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(companyContact);
+      const hasScheme = /^https?:\/\//i.test(companyContact);
+      link.href = isEmail ? `mailto:${companyContact}` : (hasScheme ? companyContact : `https://${companyContact}`);
+      if (!isEmail) {
+        link.target = '_blank';
+        link.rel = 'noopener';
+      }
+      contactRow.appendChild(link);
+
+      const suffix = document.createElement('span');
+      suffix.textContent = ' with any questions';
+      contactRow.appendChild(suffix);
+
+      text.appendChild(contactRow);
     }
 
-    wrap.appendChild(text);
+    topRow.appendChild(text);
+    wrap.appendChild(topRow);
+
+    if (clientName) {
+      const client = el('h2', 'wpwm-tvd-branding-client', clientName);
+      wrap.appendChild(client);
+    }
+
     return wrap;
   }
 
@@ -511,6 +540,10 @@ function wpwmThemeVariationDisplay() {
     const header = el('div', CSS_CLASS_HEADER);
 
     header.appendChild(renderBrandingHeaderEl());
+
+    const instructions = el('div', 'wpwm-tvd-instructions');
+    instructions.innerHTML = '<b>Select</b> the Theme Variation you like.';
+    header.appendChild(instructions);
 
     if (UI_TEXT.noteText) {
       const note = el('div', CSS_CLASS_NOTE, UI_TEXT.noteText);
@@ -766,6 +799,32 @@ function wpwmThemeVariationDisplay() {
 
     const PLACEHOLDER_COLOR = '#10b981';
 
+    const resolveCssVarExpression = (expr, depth = 0) => {
+      if (typeof expr !== 'string') return expr;
+      if (depth > 10) return expr;
+      const s = expr.trim();
+      if (!s.startsWith('var(')) return expr;
+
+      // Supports: var(--x) and var(--x, fallback)
+      const m = s.match(/^var\(\s*--([a-z0-9-]+)\s*(?:,\s*(.+?)\s*)?\)$/i);
+      if (!m) return expr;
+      const varName = (m[1] || '').toLowerCase();
+      const fallback = typeof m[2] === 'string' ? m[2].trim() : '';
+
+      const direct = cssVars[varName];
+      if (typeof direct === 'string' && direct.trim()) {
+        if (direct.trim().startsWith('var(')) return resolveCssVarExpression(direct, depth + 1);
+        return direct;
+      }
+
+      if (fallback) {
+        if (fallback.startsWith('var(')) return resolveCssVarExpression(fallback, depth + 1);
+        return fallback;
+      }
+
+      return expr;
+    };
+
     // Parse CSS variables from the styles.css string
     const cssVars = {};
     if (cssString) {
@@ -773,12 +832,7 @@ function wpwmThemeVariationDisplay() {
       for (const match of varMatches) {
         const varName = match[1];
         let varValue = match[2].trim();
-        if (varValue.startsWith('var(')) {
-          const nestedVar = varValue.match(/var\(--([a-z0-9-]+)\)/i);
-          if (nestedVar && cssVars[nestedVar[1]]) {
-            varValue = cssVars[nestedVar[1]];
-          }
-        }
+        if (varValue.startsWith('var(')) varValue = resolveCssVarExpression(varValue);
         cssVars[varName] = varValue;
       }
     }
@@ -842,7 +896,12 @@ function wpwmThemeVariationDisplay() {
 
       // Resolve var(--x) using parsed CSS vars when possible
       if (c.startsWith('var(')) {
-        const varMatch = c.match(/var\(--([a-z0-9-]+)\)/i);
+        const resolvedExpr = resolveCssVarExpression(c);
+        if (typeof resolvedExpr === 'string' && resolvedExpr.trim() && !resolvedExpr.trim().startsWith('var(')) {
+          return resolvedExpr.trim();
+        }
+
+        const varMatch = c.match(/var\(\s*--([a-z0-9-]+)\s*(?:,\s*[^\)]+)?\)/i);
         if (varMatch && cssVars[varMatch[1]]) {
           const resolved = (cssVars[varMatch[1]] || '').trim();
           if (resolved && !resolved.startsWith('var(')) return resolved;
@@ -895,10 +954,7 @@ function wpwmThemeVariationDisplay() {
           let color = paletteEntry.color;
           // If color is a CSS variable, resolve it
           if (color && color.startsWith('var(')) {
-            const varMatch = color.match(/var\(--([a-z0-9-]+)\)/i);
-            if (varMatch && cssVars[varMatch[1]]) {
-              color = cssVars[varMatch[1]];
-            }
+            color = resolveCssVarExpression(color);
           }
           // Return if we have a real color value (not another var)
           if (color && !color.startsWith('var(')) {
@@ -1065,8 +1121,11 @@ function wpwmThemeVariationDisplay() {
     };
 
     // Prefer semantic slugs if present, otherwise fill sequentially
-    const baseLightExplicit = getColor('base-light', 'background-light', 'background');
-    const baseDarkExplicit = getColor('base-dark', 'background-dark');
+    const baseLightFromCss = resolveStyleColorValue(cssVars['bg-light'] || cssVars['base-light']);
+    const baseDarkFromCss = resolveStyleColorValue(cssVars['bg-dark'] || cssVars['base-dark']);
+
+    const baseLightExplicit = baseLightFromCss || getColor('bg-light', 'base-light', 'background-light', 'background');
+    const baseDarkExplicit = baseDarkFromCss || getColor('bg-dark', 'base-dark', 'background-dark');
     const baseSingle = getColor('base', 'basecolor');
     const contrastSingle = getColor('contrast', 'contrastcolor');
     const contrast2 = getColor('contrast-2');
@@ -1351,17 +1410,17 @@ function wpwmThemeVariationDisplay() {
     const headingDark = bestForegroundColor(baseDark, [primaryLight, accentLight, textOnDark, textOnLight]);
 
     const listItemBgLight = remaining.length > 3 ? remaining[3] : primaryLight;
-    const listItemBgDark = remaining.length > 3 ? remaining[3] : primaryDark;
+    const listItemBgDark = remaining.length > 4 ? remaining[4] : (remaining.length > 3 ? remaining[3] : primaryDark);
     const listItemTextLight = chooseForeground(listItemBgLight, textOnLight, textOnDark);
     const listItemTextDark = chooseForeground(listItemBgDark, textOnLight, textOnDark);
 
     const listItemAltBgLight = remaining.length > 4 ? remaining[4] : secondaryLight;
-    const listItemAltBgDark = remaining.length > 4 ? remaining[4] : secondaryDark;
+    const listItemAltBgDark = remaining.length > 5 ? remaining[5] : (remaining.length > 4 ? remaining[4] : secondaryDark);
     const listItemAltTextLight = chooseForeground(listItemAltBgLight, textOnLight, textOnDark);
     const listItemAltTextDark = chooseForeground(listItemAltBgDark, textOnLight, textOnDark);
 
     const menuAltBgLight = remaining.length > 5 ? remaining[5] : tertiaryLight;
-    const menuAltBgDark = remaining.length > 5 ? remaining[5] : tertiaryDark;
+    const menuAltBgDark = remaining.length > 6 ? remaining[6] : (remaining.length > 5 ? remaining[5] : tertiaryDark);
     const menuAltTextLight = chooseForeground(menuAltBgLight, textOnLight, textOnDark);
     const menuAltTextDark = chooseForeground(menuAltBgDark, textOnLight, textOnDark);
 
@@ -1413,7 +1472,6 @@ function wpwmThemeVariationDisplay() {
 
     // Modal header with title and controls
     const header = el('div', CSS_CLASS_MODAL_HEADER);
-    header.appendChild(renderBrandingHeaderEl());
     const titleEl = el('h2', CSS_CLASS_MODAL_TITLE);
     const controls = el('div', CSS_CLASS_MODAL_CONTROLS);
 
@@ -1584,7 +1642,7 @@ function wpwmThemeVariationDisplay() {
         ">
           ${derivedNote ? `<div class="wpwm-preview-note">${derivedNote}</div>` : ''}
           <div class="wpwm-preview-card">
-            <h1 class="wpwm-preview-title">Welcome to Your Site</h1>
+            <h1 class="wpwm-preview-title">${escapeHtml(((agencyBranding && agencyBranding.clientName) || '').toString().trim() || 'Welcome to Your Site')}</h1>
             <p class="wpwm-preview-lead">The quick brown fox <a href="#" class="wpwm-preview-inline-link">jumps over</a> the lazy dog.</p>
 
             <div class="wpwm-preview-primary-band">

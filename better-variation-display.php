@@ -171,8 +171,6 @@ add_action(
 				$version   = '0.1.0';
 				$file_time = file_exists( WPWM_TVD_DIR . 'assets/app.js' ) ? gmdate( 'Y-m-d H:i:s', filemtime( WPWM_TVD_DIR . 'assets/app.js' ) ) : 'unknown';
 				echo '<div class="wrap">';
-				echo '<h1>Theme Variation Display </h1>';
-				echo '<p>Select the Theme Variation you like.</p>';
 				// Required mount point for assets/app.js. The script looks for #wpwm-tvd-root and injects the variations UI here; deleting this div prevents rendering.
 				echo '<div id="wpwm-tvd-root"></div>';
 				echo '</div>';
@@ -296,6 +294,10 @@ add_action(
 					$styles_dir = trailingslashit( $theme_dir ) . 'styles/';
 					if ( is_dir( $styles_dir ) ) {
 						foreach ( glob( $styles_dir . '*.json' ) as $file ) {
+							// Exclude plugin metadata / branding files (not actual theme variations)
+							if ( strtolower( basename( $file ) ) === 'agency-settings.json' ) {
+								continue;
+							}
 							$raw = wpwm_tvd_read_local_file( $file );
 							if ( ! $raw ) {
 								continue; }
@@ -360,6 +362,7 @@ add_action(
 							'post_type'      => 'wp_global_styles',
 							'posts_per_page' => 1,
 							'no_found_rows'  => true,
+							// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
 							'tax_query'      => array(
 								array(
 									'taxonomy' => 'wp_theme',
@@ -538,6 +541,7 @@ add_action(
 							'post_type'      => 'wp_global_styles',
 							'posts_per_page' => 1,
 							'no_found_rows'  => true,
+							// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
 							'tax_query'      => array(
 								array(
 									'taxonomy' => 'wp_theme',

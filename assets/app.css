@@ -5,20 +5,30 @@
 
 .wpwm-tvd-header {
 	display: flex;
-	align-items: center;
-	gap: 12px;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 10px;
 	margin: 8px 0
 }
 
 .wpwm-tvd-branding {
 	display: flex;
-	align-items: center;
+	flex-direction: column;
+	align-items: flex-start;
 	gap: 10px;
+	width: 100%;
+}
+
+.wpwm-tvd-branding-top {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	width: 100%;
 }
 
 .wpwm-tvd-branding-logo {
-	width: 32px;
-	height: 32px;
+	width: 120px;
+	height: auto;
 	object-fit: contain;
 	border-radius: 4px;
 	background: #fff;
@@ -32,18 +42,26 @@
 }
 
 .wpwm-tvd-branding-title {
-	font-weight: 600;
-	font-size: 14px;
+	font-weight: 700;
+	font-size: 20px;
 	line-height: 1.2;
 }
 
 .wpwm-tvd-branding-client {
-	font-size: 12px;
-	color: #646970;
+	font-size: 20px;
+	font-weight: 700;
+	line-height: 1.2;
+	margin: 4px 0 0 0;
+	color: #1d2327;
+}
+
+.wpwm-tvd-branding-contact-row {
+	font-size: 14px;
+	color: #50575e;
 }
 
 .wpwm-tvd-branding-contact {
-	font-size: 12px;
+	font-size: 14px;
 	color: #2271b1;
 	text-decoration: none;
 }
@@ -183,6 +201,11 @@
 	font-size: 12px;
 	color: #646970;
 	margin-top: 4px
+}
+
+.wpwm-tvd-instructions {
+	font-size: 14px;
+	margin-top: 4px;
 }
 
 .wpwm-tvd-current-badge {
