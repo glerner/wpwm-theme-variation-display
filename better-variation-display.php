@@ -785,6 +785,7 @@ if ( defined( 'WP_CLI' ) && WP_CLI ) {
 					'post_type'      => 'wp_global_styles',
 					'posts_per_page' => 1,
 					'no_found_rows'  => true,
+					// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
 					'tax_query'      => array(
 						array(
 							'taxonomy' => 'wp_theme',

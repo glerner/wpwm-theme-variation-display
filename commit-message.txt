@@ -1,0 +1,48 @@
+Theme Variation Display 0.1.1: button previews, gradient support, README updates
+
+- README.md:
+  - Renamed contributor from lernerconsult to wp-website-mastery
+  - Updated tested-up-to from 6.9.1 to 7.0.2
+  - Bumped stable tag from 0.1.0 to 0.1.1
+  - Renamed "WPWM Color Palette Generator" to "WPWM Contrast-First Color Engine"
+    throughout
+  - Reworded descriptions: "professional-size Color Palettes", "4 clear brand
+    roles", clarified WCAG AAA scope (text contrast only, other items to check)
+  - Updated variation description to reference theme's /styles folder instead
+    of "6 or 24 permutations"
+  - Added FAQ entry for OKLCH, HSL, RGB, RGBA, and Hex color format support
+  - Updated screenshot filename and alt text
+  - Wrapped long lines at ~100 characters
+
+- assets/app.css:
+  - Added button group label, button row, and button base styles
+    (.wpwm-preview-group-label, .wpwm-preview-btn-row, .wpwm-preview-btn)
+  - Added filled button classes for dark/darker bands: primary, secondary,
+    tertiary, accent, error, notice, success — with hover (other-of-the-pair)
+    and active (flip text/bg) states, all light-dark() aware
+  - Added outline button classes for primary-dark and accent-dark with
+    hover and active states
+  - Added filled button classes for lighter bands: primary-lighter,
+    secondary-lighter, tertiary-lighter, accent-lighter, error-light,
+    notice-light, success-light — with hover states
+  - Added menu link hover style (.wpwm-preview-link-hover) with light-dark
+    accent color and underline
+  - Added gradient card layout styles (.wpwm-preview-gradient-row,
+    .wpwm-preview-gradient-card)
+
+- assets/app.js:
+  - Added linear-gradient() pattern to sanitizeColorValue() so theme.json
+    gradient definitions pass through sanitization
+  - Added gradient CSS variables (--grad-ps-l1 through --grad-st-d2) to
+    the preview's inline :root style block
+  - Added button preview sections: filled dark/darker bands, outline dark
+    band, filled lighter bands, and menu link hover
+  - Added gradient preview section that reads settings.color.gradients
+    from the variation config and renders gradient cards with names
+
+- better-variation-display.php:
+  - Added phpcs:ignore comment for slow_db_query_tax_query on the
+    tax_query in WP_CLI variation lookup
+
+- app-js-code-review-2026-01-30.md → docs/app-js-code-review-2026-01-30.md:
+  - Moved file into docs/ directory

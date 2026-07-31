@@ -317,6 +317,9 @@ function wpwmThemeVariationDisplay() {
     // CSS var() references
     if (/^var\(--[a-z0-9-]+\)$/i.test(s)) return s;
 
+    // linear-gradient() with var() or color stops (for theme.json gradients)
+    if (/^linear-gradient\([^;{}]*\)$/i.test(s)) return s;
+
     // Named CSS colors (basic set)
     const namedColors = ['transparent', 'currentcolor', 'inherit', 'initial', 'unset'];
     if (namedColors.includes(s.toLowerCase())) return s;
@@ -1639,6 +1642,18 @@ function wpwmThemeVariationDisplay() {
           --menu-alt-bg-dark: ${s(menuAltBgDark)};
           --menu-alt-text-light: ${s(menuAltTextLight)};
           --menu-alt-text-dark: ${s(menuAltTextDark)};
+          --grad-ps-l1: ${s(primaryLighter)};
+          --grad-ps-l2: ${s(secondaryLighter)};
+          --grad-ps-d1: ${s(primaryDarker)};
+          --grad-ps-d2: ${s(secondaryDarker)};
+          --grad-pt-l1: ${s(primaryLighter)};
+          --grad-pt-l2: ${s(tertiaryLighter)};
+          --grad-pt-d1: ${s(primaryDarker)};
+          --grad-pt-d2: ${s(tertiaryDarker)};
+          --grad-st-l1: ${s(secondaryLighter)};
+          --grad-st-l2: ${s(tertiaryLighter)};
+          --grad-st-d1: ${s(secondaryDarker)};
+          --grad-st-d2: ${s(tertiaryDarker)};
         ">
           ${derivedNote ? `<div class="wpwm-preview-note">${derivedNote}</div>` : ''}
           <div class="wpwm-preview-card">
@@ -1671,6 +1686,50 @@ function wpwmThemeVariationDisplay() {
               <a href="#" class="wpwm-preview-menu-item">Menu item</a>
               <a href="#" class="wpwm-preview-menu-item wpwm-preview-menu-item--alt">Menu item</a>
             </nav>
+
+            <h4 class="wpwm-preview-group-label">Filled — Dark/Darker bands</h4>
+            <div class="wpwm-preview-btn-row">
+              <button class="wpwm-preview-btn wpwm-preview-btn--primary-dark">Primary Dark</button>
+              <button class="wpwm-preview-btn wpwm-preview-btn--secondary-dark">Secondary Dark</button>
+              <button class="wpwm-preview-btn wpwm-preview-btn--tertiary-dark">Tertiary Dark</button>
+              <button class="wpwm-preview-btn wpwm-preview-btn--accent-dark">Accent Dark</button>
+              <button class="wpwm-preview-btn wpwm-preview-btn--error-dark">Error Dark</button>
+              <button class="wpwm-preview-btn wpwm-preview-btn--notice-dark">Notice Dark</button>
+              <button class="wpwm-preview-btn wpwm-preview-btn--success-dark">Success Dark</button>
+            </div>
+
+            <h4 class="wpwm-preview-group-label">Outline — Dark band</h4>
+            <div class="wpwm-preview-btn-row">
+              <button class="wpwm-preview-btn wpwm-preview-btn-outline--primary-dark">Primary Dark</button>
+              <button class="wpwm-preview-btn wpwm-preview-btn-outline--accent-dark">Accent Dark</button>
+            </div>
+
+            <h4 class="wpwm-preview-group-label">Filled — Lighter bands</h4>
+            <div class="wpwm-preview-btn-row">
+              <button class="wpwm-preview-btn wpwm-preview-btn--primary-lighter">Primary Lighter</button>
+              <button class="wpwm-preview-btn wpwm-preview-btn--secondary-lighter">Secondary Lighter</button>
+              <button class="wpwm-preview-btn wpwm-preview-btn--tertiary-lighter">Tertiary Lighter</button>
+              <button class="wpwm-preview-btn wpwm-preview-btn--accent-lighter">Accent Lighter</button>
+              <button class="wpwm-preview-btn wpwm-preview-btn--error-light">Error Light</button>
+              <button class="wpwm-preview-btn wpwm-preview-btn--notice-light">Notice Light</button>
+              <button class="wpwm-preview-btn wpwm-preview-btn--success-light">Success Light</button>
+            </div>
+
+            <h4 class="wpwm-preview-group-label">Menu link (light-dark hover)</h4>
+            <div class="wpwm-preview-btn-row">
+              <a href="#" class="wpwm-preview-link-hover">light-dark hover</a>
+            </div>
+
+            ${(() => {
+          const gradients = getConfigPath(v.config, ['settings', 'color', 'gradients'], []);
+          if (!gradients || !gradients.length) return '';
+          const cards = gradients.map(g => {
+            const gradientStr = sanitizeColorValue(g.gradient || '');
+            const name = escapeHtml(g.name || g.slug || 'Gradient');
+            return `<div class="wpwm-preview-gradient-card" style="background: ${gradientStr}; color: light-dark(var(--text-on-light), var(--text-on-dark));"><strong>${name}</strong></div>`;
+          }).join('');
+          return `<h4 class="wpwm-preview-group-label">Gradients</h4><div class="wpwm-preview-gradient-row">${cards}</div>`;
+        })()}
 
             <div class="wpwm-preview-testimonial">
               <div class="wpwm-preview-testimonial-quote">“We switched to a contrast-checked palette and immediately got fewer complaints about readability.”</div>
