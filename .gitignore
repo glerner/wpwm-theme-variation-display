@@ -72,3 +72,4 @@ test_files_to_analyze.txt
 # bin/test-analyzer.sh
 # bin/move_test_files.sh
 # bin/process-test-results.sh
+.vercel

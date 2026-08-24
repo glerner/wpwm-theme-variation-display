@@ -1726,7 +1726,18 @@ function wpwmThemeVariationDisplay() {
           const cards = gradients.map(g => {
             const gradientStr = sanitizeColorValue(g.gradient || '');
             const name = escapeHtml(g.name || g.slug || 'Gradient');
-            return `<div class="wpwm-preview-gradient-card" style="background: ${gradientStr}; color: light-dark(var(--text-on-light), var(--text-on-dark));"><strong>${name}</strong></div>`;
+            // CFCE gradient slugs end in -light or -dark, indicating the
+            // lightness band of the paired colors. The exported utilities
+            // CSS uses the same convention: light gradients get
+            // text-on-light (flipped in dark mode), dark gradients get
+            // text-on-dark (flipped in dark mode). See .has-*-gradient-background
+            // classes in the exported *-utilities.css file.
+            const slug = (g.slug || '').toLowerCase();
+            const isDarkGradient = slug.endsWith('-dark');
+            const textColor = isDarkGradient
+              ? 'light-dark(var(--text-on-dark), var(--text-on-light))'
+              : 'light-dark(var(--text-on-light), var(--text-on-dark))';
+            return `<div class="wpwm-preview-gradient-card" style="background: ${gradientStr}; color: ${textColor};"><strong>${name}</strong></div>`;
           }).join('');
           return `<h4 class="wpwm-preview-group-label">Gradients</h4><div class="wpwm-preview-gradient-row">${cards}</div>`;
         })()}

@@ -14,5 +14,10 @@
   },
   "extra": {
     "installer-name": "wpwm-theme-variation-display"
+  },
+  "config": {
+    "allow-plugins": {
+      "php-http/discovery": true
+    }
   }
 }
